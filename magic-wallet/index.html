@@ -1,0 +1,140 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>Magic Wallet</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Home Screen -->
+    <div id="screen-home" class="screen active" role="main">
+      <header class="app-header">
+        <div class="header-title">
+          <span class="header-logo">🪄</span>
+          <h1>Magic Wallet</h1>
+        </div>
+        <span id="location-status" class="location-badge" aria-live="polite"></span>
+      </header>
+      <div class="scroll-container">
+        <section id="suggested-section" class="suggested-section hidden" aria-label="Suggested card">
+          <p class="section-label">✨ Suggested nearby</p>
+          <div id="suggested-card"></div>
+        </section>
+        <section aria-label="All cards">
+          <p class="section-label">Your cards</p>
+          <div id="cards-list" class="cards-list"></div>
+        </section>
+      </div>
+      <button id="add-btn" class="fab" aria-label="Add new card" title="Add card">+</button>
+    </div>
+
+    <!-- Add Card Screen -->
+    <div id="screen-add" class="screen" aria-label="Add card">
+      <header class="app-header">
+        <button class="back-btn icon-btn" data-target="home" aria-label="Back">&#8592;</button>
+        <h2>New card</h2>
+      </header>
+      <div class="scroll-container">
+        <form id="add-form" class="form" novalidate>
+          <div class="emoji-name-row">
+            <div class="form-field emoji-field">
+              <label for="card-emoji">Icon</label>
+              <input type="text" id="card-emoji" maxlength="2" placeholder="💳" value="💳" />
+            </div>
+            <div class="form-field name-field">
+              <label for="card-name">Shop name</label>
+              <input type="text" id="card-name" placeholder="e.g. Tesco" autocomplete="off" required />
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="card-data">Card data <span class="label-hint">(barcode, URL, member number…)</span></label>
+            <div class="scan-input-row">
+              <input type="text" id="card-data" placeholder="e.g. 9876543210123" autocomplete="off" required />
+              <button type="button" id="scan-btn" class="btn btn--scan" title="Scan with camera" aria-label="Scan card with camera">📷</button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="card-color">Card colour</label>
+            <div class="color-row">
+              <input type="color" id="card-color" value="#6c63ff" />
+              <div class="color-swatches">
+                <button type="button" class="swatch" style="background:#6c63ff" data-color="#6c63ff" aria-label="Purple"></button>
+                <button type="button" class="swatch" style="background:#0ea5e9" data-color="#0ea5e9" aria-label="Blue"></button>
+                <button type="button" class="swatch" style="background:#22c55e" data-color="#22c55e" aria-label="Green"></button>
+                <button type="button" class="swatch" style="background:#f59e0b" data-color="#f59e0b" aria-label="Amber"></button>
+                <button type="button" class="swatch" style="background:#ef4444" data-color="#ef4444" aria-label="Red"></button>
+                <button type="button" class="swatch" style="background:#ec4899" data-color="#ec4899" aria-label="Pink"></button>
+                <button type="button" class="swatch" style="background:#14b8a6" data-color="#14b8a6" aria-label="Teal"></button>
+              </div>
+            </div>
+          </div>
+          <div class="qr-preview-wrap">
+            <p class="section-label">Preview</p>
+            <div id="qr-preview" class="qr-preview-box"></div>
+            <p id="qr-hint" class="qr-hint">Enter card data above to preview</p>
+          </div>
+          <button type="submit" class="btn btn--primary">Save card</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Card Detail Screen -->
+    <div id="screen-detail" class="screen" aria-label="Card detail">
+      <header class="app-header" id="detail-header">
+        <button class="back-btn icon-btn" data-target="home" aria-label="Back">&#8592;</button>
+        <h2 id="detail-title"></h2>
+        <button class="icon-btn delete-btn" id="detail-delete" aria-label="Delete card">🗑</button>
+      </header>
+      <div class="scroll-container detail-scroll">
+        <div class="qr-display-card" id="qr-display-card">
+          <div id="detail-qr" class="qr-code-wrap" role="img" aria-label="QR code"></div>
+          <p id="detail-data" class="qr-data-label"></p>
+        </div>
+        <div class="detail-actions">
+          <button id="use-here-btn" class="btn btn--primary btn--wide">
+            <span id="use-btn-label">📍 Used here</span>
+          </button>
+          <p id="location-accuracy" class="location-info-small"></p>
+        </div>
+        <div id="location-history" class="location-history"></div>
+      </div>
+    </div>
+
+  </div>
+
+    <!-- Scan Modal -->
+    <div id="scan-modal" class="scan-modal" role="dialog" aria-modal="true" aria-label="Scan card">
+      <div class="scan-header">
+        <button class="icon-btn" id="scan-close" aria-label="Close scanner">&#10005;</button>
+        <h3>Scan your card</h3>
+        <span></span>
+      </div>
+      <div class="scan-viewport">
+        <video id="scan-video" playsinline muted autoplay></video>
+        <canvas id="scan-canvas" aria-hidden="true"></canvas>
+        <div class="scan-overlay">
+          <div class="scan-frame">
+            <span class="scan-corner tl"></span>
+            <span class="scan-corner tr"></span>
+            <span class="scan-corner bl"></span>
+            <span class="scan-corner br"></span>
+            <div class="scan-line"></div>
+          </div>
+          <p class="scan-hint">Point at a QR code or barcode</p>
+        </div>
+      </div>
+      <p id="scan-status" class="scan-status">Starting camera…</p>
+    </div>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
