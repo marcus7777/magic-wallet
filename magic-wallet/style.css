@@ -426,6 +426,12 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
   box-shadow: 0 4px 16px rgba(108,99,255,.35);
 }
 .btn--primary:hover { opacity: .9; }
+.btn--secondary {
+  background: var(--surface-2);
+  border: 1px solid rgba(255,255,255,.1);
+  color: var(--text);
+}
+.btn--secondary:hover { background: var(--surface-3); }
 .btn--wide { width: 100%; }
 .btn--success { background: var(--success) !important; box-shadow: 0 4px 16px rgba(34,197,94,.35) !important; }
 

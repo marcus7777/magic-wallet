@@ -1,7 +1,260 @@
 'use strict';
 
 /* ═══════════════════════════════════════════════════════════════
-   CardStore — CRUD over localStorage
+   JSURL — Sage/jsurl official implementation & integration
+═══════════════════════════════════════════════════════════════ */
+const JSURL = window.JSURL || (() => {
+  const exports = {};
+  (function(exports) {
+    'use strict';
+    exports.stringify = function stringify(v) {
+      function encode(s) {
+        return !/[^\w-.]/.test(s) ? s : s.replace(/[^\w-.]/g, function(ch) {
+          if (ch === '$') return '!';
+          ch = ch.charCodeAt(0);
+          return ch < 0x100 ? '*' + ('00' + ch.toString(16)).slice(-2) : '**' + ('0000' + ch.toString(16)).slice(-4);
+        });
+      }
+
+      var tmpAry;
+
+      switch (typeof v) {
+        case 'number':
+          return isFinite(v) ? '~' + v : '~null';
+        case 'boolean':
+          return '~' + v;
+        case 'string':
+          return "~'" + encode(v);
+        case 'object':
+          if (!v) return '~null';
+
+          tmpAry = [];
+
+          if (Array.isArray(v)) {
+            for (var i = 0; i < v.length; i++) {
+              tmpAry[i] = stringify(v[i]) || '~null';
+            }
+
+            return '~(' + (tmpAry.join('') || '~') + ')';
+          } else {
+            for (var key in v) {
+              if (v.hasOwnProperty(key)) {
+                var val = stringify(v[key]);
+
+                if (val) {
+                  tmpAry.push(encode(key) + val);
+                }
+              }
+            }
+
+            return '~(' + tmpAry.join('~') + ')';
+          }
+        default:
+          return;
+      }
+    };
+
+    var reserved = {
+      'true': true,
+      'false': false,
+      'null': null
+    };
+
+    exports.parse = function(s) {
+      if (!s) return s;
+      s = s.replace(/%(25)*27/g, "'");
+      var i = 0,
+        len = s.length;
+
+      function eat(expected) {
+        if (s.charAt(i) !== expected) throw new Error('bad JSURL syntax: expected ' + expected + ', got ' + (s && s.charAt(i)));
+        i++;
+      }
+
+      function decode() {
+        var beg = i,
+          ch, r = '';
+        while (i < len && (ch = s.charAt(i)) !== '~' && ch !== ')') {
+          switch (ch) {
+            case '*':
+              if (beg < i) r += s.substring(beg, i);
+              if (s.charAt(i + 1) === '*') r += String.fromCharCode(parseInt(s.substring(i + 2, i + 6), 16)), beg = (i += 6);
+              else r += String.fromCharCode(parseInt(s.substring(i + 1, i + 3), 16)), beg = (i += 3);
+              break;
+            case '!':
+              if (beg < i) r += s.substring(beg, i);
+              r += '$', beg = ++i;
+              break;
+            default:
+              i++;
+          }
+        }
+        return r + s.substring(beg, i);
+      }
+
+      return (function parseOne() {
+        var result, ch, beg;
+        eat('~');
+        switch (ch = s.charAt(i)) {
+          case '(':
+            i++;
+            if (s.charAt(i) === '~') {
+              result = [];
+              if (s.charAt(i + 1) === ')') i++;
+              else {
+                do {
+                  result.push(parseOne());
+                } while (s.charAt(i) === '~');
+              }
+            } else {
+              result = {};
+              if (s.charAt(i) !== ')') {
+                do {
+                  var key = decode();
+                  result[key] = parseOne();
+                } while (s.charAt(i) === '~' && ++i);
+              }
+            }
+            eat(')');
+            break;
+          case "'":
+            i++;
+            result = decode();
+            break;
+          default:
+            beg = i++;
+            while (i < len && /[^)~]/.test(s.charAt(i)))
+            i++;
+            var sub = s.substring(beg, i);
+            if (/[\d\-]/.test(ch)) {
+              result = parseFloat(sub);
+            } else {
+              result = reserved[sub];
+              if (typeof result === 'undefined') throw new Error('bad value keyword: ' + sub);
+            }
+        }
+        return result;
+      })();
+    };
+  })(exports);
+  return exports;
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Geohash — 7-character base32 encoding & 8-neighbor lookup
+═══════════════════════════════════════════════════════════════ */
+const Geohash = (() => {
+  const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+
+  /** Encodes latitude and longitude to a geohash string of length `precision` (default 7). */
+  function encode(lat, lon, precision = 7) {
+    let latMin = -90, latMax = 90;
+    let lonMin = -180, lonMax = 180;
+    let hash = '';
+    let bit = 0;
+    let ch = 0;
+    let isEven = true;
+
+    while (hash.length < precision) {
+      if (isEven) {
+        const mid = (lonMin + lonMax) / 2;
+        if (lon >= mid) {
+          ch |= (1 << (4 - bit));
+          lonMin = mid;
+        } else {
+          lonMax = mid;
+        }
+      } else {
+        const mid = (latMin + latMax) / 2;
+        if (lat >= mid) {
+          ch |= (1 << (4 - bit));
+          latMin = mid;
+        } else {
+          latMax = mid;
+        }
+      }
+
+      isEven = !isEven;
+      if (bit < 4) {
+        bit++;
+      } else {
+        hash += BASE32[ch];
+        bit = 0;
+        ch = 0;
+      }
+    }
+    return hash;
+  }
+
+  /** Decodes a geohash string into bounding box and center coordinate. */
+  function decode(geohash) {
+    let latMin = -90, latMax = 90;
+    let lonMin = -180, lonMax = 180;
+    let isEven = true;
+
+    for (let i = 0; i < geohash.length; i++) {
+      const c = geohash[i];
+      const cd = BASE32.indexOf(c);
+      if (cd === -1) continue;
+
+      for (let j = 4; j >= 0; j--) {
+        const bit = (cd >> j) & 1;
+        if (isEven) {
+          const mid = (lonMin + lonMax) / 2;
+          if (bit === 1) lonMin = mid;
+          else lonMax = mid;
+        } else {
+          const mid = (latMin + latMax) / 2;
+          if (bit === 1) latMin = mid;
+          else latMax = mid;
+        }
+        isEven = !isEven;
+      }
+    }
+
+    const lat = (latMin + latMax) / 2;
+    const lon = (lonMin + lonMax) / 2;
+    return { latMin, latMax, lonMin, lonMax, lat, lon };
+  }
+
+  /** Returns 9 geohashes: center + 8 surrounding neighbor geohashes. */
+  function getNeighbors(geohash) {
+    const { latMin, latMax, lonMin, lonMax, lat, lon } = decode(geohash);
+    const dLat = latMax - latMin;
+    const dLon = lonMax - lonMin;
+    const precision = geohash.length;
+
+    const neighbors = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        let nLat = lat + dy * dLat;
+        let nLon = lon + dx * dLon;
+
+        if (nLon > 180) nLon -= 360;
+        if (nLon < -180) nLon += 360;
+        if (nLat > 90) nLat = 90;
+        if (nLat < -90) nLat = -90;
+
+        neighbors.push(encode(nLat, nLon, precision));
+      }
+    }
+    return [...new Set(neighbors)];
+  }
+
+  /** Gets center geohash and all 8 surrounding neighbor geohashes for a lat, lon point. */
+  function getNearbyGeohashes(lat, lon, precision = 7) {
+    const center = encode(lat, lon, precision);
+    const all = getNeighbors(center);
+    return { center, all };
+  }
+
+  return { encode, decode, getNeighbors, getNearbyGeohashes };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   CardStore — CRUD over localStorage with 7-char Geohash storage
 ═══════════════════════════════════════════════════════════════ */
 const CardStore = (() => {
   const KEY = 'magic-wallet-v1';
@@ -11,8 +264,39 @@ const CardStore = (() => {
   }
 
   function load() {
-    try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
-    catch { return []; }
+    try {
+      const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
+      let needsPersist = false;
+
+      // Migrate existing cards if needed (e.g. old {lat, lon} objects to 7-char geohashes)
+      const cards = raw.map(card => {
+        if (!card.locations || !Array.isArray(card.locations)) {
+          card.locations = [];
+        } else {
+          const migratedLocs = [];
+          for (const loc of card.locations) {
+            if (typeof loc === 'string') {
+              const gh = loc.slice(0, 7);
+              if (gh.length === 7 && !migratedLocs.includes(gh)) migratedLocs.push(gh);
+            } else if (loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+              const gh = Geohash.encode(loc.lat, loc.lon, 7);
+              if (!migratedLocs.includes(gh)) migratedLocs.push(gh);
+              needsPersist = true;
+            }
+          }
+          if (JSON.stringify(migratedLocs) !== JSON.stringify(card.locations)) {
+            card.locations = migratedLocs;
+            needsPersist = true;
+          }
+        }
+        return card;
+      });
+
+      if (needsPersist) persist(cards);
+      return cards;
+    } catch {
+      return [];
+    }
   }
 
   function persist(cards) {
@@ -24,7 +308,17 @@ const CardStore = (() => {
 
     add(card) {
       const cards = load();
-      const newCard = { ...card, id: uid(), locations: [] };
+      const locs = Array.isArray(card.locations)
+        ? card.locations.map(l => String(l).slice(0, 7)).filter(l => l.length === 7)
+        : [];
+      const newCard = {
+        id: uid(),
+        name: card.name,
+        data: card.data,
+        emoji: card.emoji || '💳',
+        color: card.color || '#6c63ff',
+        locations: [...new Set(locs)]
+      };
       cards.push(newCard);
       persist(cards);
       return newCard;
@@ -34,16 +328,18 @@ const CardStore = (() => {
       persist(load().filter(c => c.id !== id));
     },
 
-    addLocation(id, lat, lon) {
+    addLocationGeohash(id, geohash) {
       const cards = load();
       const card = cards.find(c => c.id === id);
       if (!card) return;
       card.locations = card.locations || [];
-      card.locations.push({ lat, lon, usedAt: new Date().toISOString() });
-      // Keep last 20 location records
-      if (card.locations.length > 20) card.locations.splice(0, card.locations.length - 20);
-      persist(cards);
-      return cards.find(c => c.id === id);
+      const gh7 = String(geohash).slice(0, 7);
+      if (gh7.length === 7 && !card.locations.includes(gh7)) {
+        card.locations.push(gh7);
+        if (card.locations.length > 20) card.locations.splice(0, card.locations.length - 20);
+        persist(cards);
+      }
+      return card;
     },
 
     getById(id) {
@@ -54,39 +350,35 @@ const CardStore = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   Location — Geolocation + Haversine matching
+   Location — Geolocation + Geohash 7-char matching (exact + 8 neighbors)
 ═══════════════════════════════════════════════════════════════ */
 const Location = (() => {
-  const THRESHOLD_M = 150; // metres within which a card is "matched"
-
-  function haversine(lat1, lon1, lat2, lon2) {
-    const R   = 6_371_000; // Earth radius (metres)
-    const φ1  = (lat1 * Math.PI) / 180;
-    const φ2  = (lat2 * Math.PI) / 180;
-    const Δφ  = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ  = ((lon2 - lon1) * Math.PI) / 180;
-    const a   = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
   return {
-    THRESHOLD_M,
-
-    /** Returns { card, distance } for the nearest card within threshold, or null. */
+    /**
+     * Checks if current location (lat, lon) matches any card location geohash
+     * by checking exact match on center geohash and then the 8 surrounding geohashes.
+     */
     findNearest(cards, lat, lon) {
-      let bestCard = null;
-      let bestDist = Infinity;
+      const { center, all } = Geohash.getNearbyGeohashes(lat, lon, 7);
 
+      // 1. Exact match on center geohash
       for (const card of cards) {
-        for (const loc of (card.locations || [])) {
-          const d = haversine(lat, lon, loc.lat, loc.lon);
-          if (d < bestDist) { bestDist = d; bestCard = card; }
+        if (Array.isArray(card.locations) && card.locations.includes(center)) {
+          return { card, matchType: 'exact', geohash: center };
         }
       }
 
-      return bestDist <= THRESHOLD_M
-        ? { card: bestCard, distance: Math.round(bestDist) }
-        : null;
+      // 2. Eight surrounding geohashes match
+      for (const card of cards) {
+        if (Array.isArray(card.locations)) {
+          const matchedGh = card.locations.find(gh => all.includes(gh));
+          if (matchedGh) {
+            return { card, matchType: 'nearby', geohash: matchedGh };
+          }
+        }
+      }
+
+      return null;
     },
 
     /** Wraps navigator.geolocation.getCurrentPosition in a Promise. */
@@ -119,8 +411,6 @@ const QR = (() => {
     container.innerHTML = '';
     if (!data || !data.trim()) return;
 
-    // qrcode-generator: type 0 = auto, M = ~15% error correction
-    // Escalate type if data is too long for auto
     let qr;
     for (const type of [0, 3, 6, 10, 15, 25, 40]) {
       try {
@@ -138,14 +428,12 @@ const QR = (() => {
       return;
     }
 
-    // createSvgTag(cellSize, margin) — we use cellSize=4 then scale via CSS
     const svg = qr.createSvgTag(4, 0);
     container.innerHTML = svg;
 
-    // Make the SVG stretch to fill its CSS-constrained parent
     const svgEl = container.querySelector('svg');
     if (svgEl) {
-      const count  = qr.getModuleCount();
+      const count = qr.getModuleCount();
       svgEl.setAttribute('viewBox', `0 0 ${count * 4} ${count * 4}`);
       svgEl.removeAttribute('width');
       svgEl.removeAttribute('height');
@@ -160,15 +448,12 @@ const QR = (() => {
 
 /* ═══════════════════════════════════════════════════════════════
    Scanner — camera-based QR / barcode reader
-   Strategy: BarcodeDetector API first (Chrome/Edge, fast, native),
-             jsQR fallback (pure JS, works everywhere with HTTPS).
 ═══════════════════════════════════════════════════════════════ */
 const Scanner = (() => {
   let stream   = null;
   let rafId    = null;
-  let detector = null; // BarcodeDetector instance (if available)
+  let detector = null;
 
-  // Build a BarcodeDetector that handles every common retail format
   const FORMATS = [
     'qr_code', 'aztec', 'data_matrix',
     'ean_13', 'ean_8', 'upc_a', 'upc_e',
@@ -185,7 +470,6 @@ const Scanner = (() => {
     } catch { return null; }
   }
 
-  /** Open the scanner modal. Returns a Promise that resolves with the scanned string. */
   function open() {
     return new Promise((resolve, reject) => {
       const modal  = document.getElementById('scan-modal');
@@ -197,12 +481,10 @@ const Scanner = (() => {
       modal.classList.add('open');
       status.textContent = 'Starting camera…';
 
-      // Close button
       const closeBtn = document.getElementById('scan-close');
       const onClose  = () => { close(); reject(new Error('cancelled')); };
       closeBtn.addEventListener('click', onClose, { once: true });
 
-      // Kick off camera
       navigator.mediaDevices
         .getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
         .then(async s => {
@@ -215,9 +497,8 @@ const Scanner = (() => {
             ? 'Camera ready — scanning…'
             : 'Camera ready — scanning (jsQR fallback)…';
 
-          // rAF loop
           const tick = async () => {
-            if (!stream) return; // closed
+            if (!stream) return;
 
             if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
               canvas.width  = video.videoWidth;
@@ -243,7 +524,6 @@ const Scanner = (() => {
     });
   }
 
-  /** Stop camera stream and hide modal. */
   function close() {
     if (rafId)  { cancelAnimationFrame(rafId); rafId = null; }
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
@@ -251,17 +531,14 @@ const Scanner = (() => {
     if (modal)  modal.classList.remove('open');
   }
 
-  /** Try BarcodeDetector → jsQR → null. */
   async function detectFrame(canvas, ctx) {
-    // ① Native BarcodeDetector
     if (detector) {
       try {
         const codes = await detector.detect(canvas);
         if (codes.length) return codes[0].rawValue;
-      } catch (_) { /* ignore transient errors */ }
+      } catch (_) { }
     }
 
-    // ② jsQR (CDN library)
     if (typeof jsQR !== 'undefined') {
       const { data: px, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(px, width, height, { inversionAttempts: 'dontInvert' });
@@ -353,7 +630,6 @@ const App = (() => {
   }
 
   function featuredCardHTML(card) {
-    const locs = card.locations?.length || 0;
     return `
       <div class="card-tile card-tile--featured" style="--card-color:${esc(card.color || '#6c63ff')}" data-id="${esc(card.id)}" tabindex="0" role="button" aria-label="Open suggested card ${esc(card.name)}">
         <div class="card-tile-featured-inner">
@@ -384,7 +660,9 @@ const App = (() => {
         const match = Location.findNearest(cards, pos.lat, pos.lon);
 
         if (match) {
-          badge.textContent = `📍 Near ${match.card.name}`;
+          badge.textContent = match.matchType === 'exact'
+            ? `📍 Near ${match.card.name} (exact)`
+            : `📍 Near ${match.card.name}`;
           badge.className   = 'location-badge location-badge--matched';
           showSuggested(match.card);
         } else {
@@ -394,7 +672,7 @@ const App = (() => {
         }
       })
       .catch(() => {
-        currentPos      = null;
+        currentPos        = null;
         badge.textContent = '🚫 No location';
         badge.className   = 'location-badge location-badge--error';
         hideSuggested();
@@ -407,7 +685,6 @@ const App = (() => {
     section.classList.remove('hidden');
     wrap.innerHTML = featuredCardHTML(card);
 
-    // Render mini QR inside featured card
     const qrBox = document.getElementById('featured-qr-box');
     if (qrBox) QR.render(qrBox, card.data);
 
@@ -449,22 +726,20 @@ const App = (() => {
     if (!card) return;
     currentCard = card;
 
-    // Header accent
     const header = document.getElementById('detail-header');
     header.style.borderTopColor = card.color || '#6c63ff';
 
     document.getElementById('detail-title').textContent = `${card.emoji || '💳'} ${card.name}`;
     document.getElementById('detail-data').textContent  = card.data;
 
-    // Render QR
     QR.render(document.getElementById('detail-qr'), card.data);
 
-    // Location accuracy hint
     const accEl = document.getElementById('location-accuracy');
     if (currentPos) {
-      accEl.textContent = `Current accuracy ±${currentPos.accuracy}m · Within ${Location.THRESHOLD_M}m counts as "here"`;
+      const currentGh = Geohash.encode(currentPos.lat, currentPos.lon, 7);
+      accEl.textContent = `Current area: ${currentGh} · Matching checks exact cell & 8 adjacent neighbors (~150m)`;
     } else {
-      accEl.textContent = 'Location unavailable — tap Used here to try again';
+      accEl.textContent = 'Location unavailable — tap Used here to save current area';
     }
 
     renderLocationHistory(card);
@@ -482,12 +757,11 @@ const App = (() => {
       return;
     }
 
-    wrap.innerHTML = `<p class="section-label" style="margin-top:8px">Where you've used this</p>` +
-      locs.slice().reverse().map(l => {
-        const date = new Date(l.usedAt);
+    wrap.innerHTML = `<p class="section-label" style="margin-top:8px">Saved Location Geohashes (7-char)</p>` +
+      locs.slice().reverse().map(gh => {
         return `<div class="loc-entry">
-          <span>📍 ${l.lat.toFixed(5)}, ${l.lon.toFixed(5)}</span>
-          <span class="loc-date">${date.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })}</span>
+          <span>📍 <code>${esc(gh)}</code></span>
+          <span class="loc-date">Geohash cell (~150m)</span>
         </div>`;
       }).join('');
   }
@@ -505,12 +779,13 @@ const App = (() => {
     try {
       const pos  = await Location.getPosition();
       currentPos = pos;
-      const updated = CardStore.addLocation(currentCard.id, pos.lat, pos.lon);
+      const geohash = Geohash.encode(pos.lat, pos.lon, 7);
+      const updated = CardStore.addLocationGeohash(currentCard.id, geohash);
       currentCard   = updated || currentCard;
 
       label.textContent = '✓ Saved!';
       btn.classList.add('btn--success');
-      toast('Location saved — we\'ll suggest this card next time you\'re here 📍');
+      toast(`Location saved (Geohash: ${geohash}) 📍`);
 
       setTimeout(() => {
         btn.disabled          = false;
@@ -518,13 +793,113 @@ const App = (() => {
         btn.classList.remove('btn--success');
         renderLocationHistory(currentCard);
         document.getElementById('location-accuracy').textContent =
-          `Current accuracy ±${pos.accuracy}m · Within ${Location.THRESHOLD_M}m counts as "here"`;
+          `Current area: ${geohash} · Matching checks exact cell & 8 adjacent neighbors`;
       }, 2000);
     } catch (err) {
       btn.disabled      = false;
       label.textContent = '📍 Used here';
       toast('⚠️ Couldn\'t get location — check permissions');
     }
+  }
+
+  // ── Share Card Link ───────────────────────────────────────────
+
+  function getCardShareUrl(card) {
+    const cardData = {
+      name: card.name,
+      data: card.data,
+      emoji: card.emoji || '💳',
+      color: card.color || '#6c63ff',
+      locations: card.locations || []
+    };
+    const jsurlStr = JSURL.stringify(cardData);
+    const baseUrl = location.origin + location.pathname;
+    return `${baseUrl}#card=${jsurlStr}`;
+  }
+
+  async function shareCard() {
+    if (!currentCard) return;
+    const shareUrl = getCardShareUrl(currentCard);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${currentCard.emoji || '💳'} ${currentCard.name}`,
+          text: `Card for ${currentCard.name}`,
+          url: shareUrl
+        });
+        toast('✓ Shared card successfully!');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast('✓ Card share link copied to clipboard!');
+    } catch (_) {
+      const input = document.createElement('textarea');
+      input.value = shareUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      toast('✓ Card share link copied to clipboard!');
+    }
+  }
+
+  // ── URL Import on Arrival ─────────────────────────────────────
+
+  function checkUrlForCardImport() {
+    let jsurlStr = null;
+
+    const hash = location.hash;
+    if (hash) {
+      if (hash.startsWith('#card=')) {
+        jsurlStr = hash.slice(6);
+      } else if (hash.startsWith('#~')) {
+        jsurlStr = hash.slice(1);
+      }
+    }
+
+    if (!jsurlStr) {
+      const params = new URLSearchParams(location.search);
+      if (params.has('card')) {
+        jsurlStr = params.get('card');
+      }
+    }
+
+    if (!jsurlStr) return false;
+
+    try {
+      const cardData = JSURL.parse(jsurlStr);
+      if (cardData && typeof cardData === 'object' && cardData.name && cardData.data) {
+        history.replaceState(null, '', location.pathname);
+
+        let locs = [];
+        if (Array.isArray(cardData.locations)) {
+          locs = cardData.locations
+            .map(l => String(l).slice(0, 7))
+            .filter(l => l.length === 7);
+        }
+
+        const newCard = CardStore.add({
+          name: String(cardData.name),
+          data: String(cardData.data),
+          emoji: cardData.emoji ? String(cardData.emoji) : '💳',
+          color: cardData.color ? String(cardData.color) : '#6c63ff',
+          locations: locs
+        });
+
+        toast(`✓ Added ${newCard.emoji} ${newCard.name} to your wallet!`);
+        openCard(newCard.id);
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to parse card from URL:', err);
+    }
+    return false;
   }
 
   // ── Add Card Screen ───────────────────────────────────────────
@@ -535,7 +910,6 @@ const App = (() => {
     const preview    = document.getElementById('qr-preview');
     const hint       = document.getElementById('qr-hint');
 
-    // Live QR preview
     dataInput.addEventListener('input', () => {
       const val = dataInput.value.trim();
       if (val) {
@@ -547,22 +921,19 @@ const App = (() => {
       }
     });
 
-    // ── Scan button ────────────────────────────────────────────
     const scanBtn = document.getElementById('scan-btn');
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      // No camera API — hide button gracefully
       scanBtn.style.display = 'none';
     } else {
       scanBtn.addEventListener('click', async () => {
         try {
           const scanned = await Scanner.open();
-          // Populate the input and fire the input event so QR preview updates
           dataInput.value = scanned;
           dataInput.dispatchEvent(new Event('input'));
           toast('✓ Scanned! Check the data and save your card.');
         } catch (err) {
-          if (err.message === 'cancelled') return; // user closed modal
+          if (err.message === 'cancelled') return;
           if (err.name === 'NotAllowedError') {
             toast('⚠️ Camera permission denied — enter data manually');
           } else if (err.name === 'NotFoundError') {
@@ -574,7 +945,6 @@ const App = (() => {
       });
     }
 
-    // Colour swatches
     document.querySelectorAll('.swatch').forEach(btn => {
       btn.addEventListener('click', () => {
         colorInput.value = btn.dataset.color;
@@ -582,16 +952,14 @@ const App = (() => {
         btn.classList.add('active');
       });
     });
-    // Mark first swatch active by default
+
     const first = document.querySelector('.swatch');
     if (first) first.classList.add('active');
 
-    // Sync colour picker → swatches
     colorInput.addEventListener('input', () => {
       document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
     });
 
-    // Form submit
     document.getElementById('add-form').addEventListener('submit', e => {
       e.preventDefault();
       const name  = document.getElementById('card-name').value.trim();
@@ -619,10 +987,8 @@ const App = (() => {
   // ── Event Binding ─────────────────────────────────────────────
 
   function bindGlobalEvents() {
-    // FAB → add screen
     document.getElementById('add-btn').addEventListener('click', () => showScreen('add'));
 
-    // Back buttons
     document.querySelectorAll('.back-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         showScreen('home', 'back');
@@ -630,7 +996,6 @@ const App = (() => {
       });
     });
 
-    // Delete button
     document.getElementById('detail-delete').addEventListener('click', () => {
       if (!currentCard) return;
       if (confirm(`Delete "${currentCard.name}"? This cannot be undone.`)) {
@@ -642,8 +1007,12 @@ const App = (() => {
       }
     });
 
-    // Used here button
     document.getElementById('use-here-btn').addEventListener('click', useHere);
+
+    const shareBtn = document.getElementById('share-card-btn');
+    if (shareBtn) shareBtn.addEventListener('click', shareCard);
+    const topShareBtn = document.getElementById('detail-share-top');
+    if (topShareBtn) topShareBtn.addEventListener('click', shareCard);
   }
 
   // ── Public init ───────────────────────────────────────────────
@@ -652,9 +1021,19 @@ const App = (() => {
     init() {
       bindGlobalEvents();
       initAddForm();
-      renderHome();
+      const imported = checkUrlForCardImport();
+      if (!imported) {
+        renderHome();
+      }
     }
   };
 })();
+
+// Export components globally
+window.JSURL = JSURL;
+window.Geohash = Geohash;
+window.CardStore = CardStore;
+window.Location = Location;
+window.App = App;
 
 document.addEventListener('DOMContentLoaded', () => App.init());
