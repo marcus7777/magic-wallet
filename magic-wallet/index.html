@@ -48,7 +48,7 @@
     <div id="screen-add" class="screen" aria-label="Add card">
       <header class="app-header">
         <button class="back-btn icon-btn" data-target="home" aria-label="Back">&#8592;</button>
-        <h2>New card</h2>
+        <h2 id="add-screen-title">New card</h2>
       </header>
       <div class="scroll-container">
         <form id="add-form" class="form" novalidate>
@@ -63,9 +63,9 @@
             </div>
           </div>
           <div class="form-field">
-            <label for="card-data">Card data <span class="label-hint">(barcode, URL, member number…)</span></label>
+            <label for="card-data">Card data <span class="label-hint">(one code per line for multiple cards)</span></label>
             <div class="scan-input-row">
-              <input type="text" id="card-data" placeholder="e.g. 9876543210123" autocomplete="off" required />
+              <textarea id="card-data" rows="2" placeholder="e.g. 9876543210123&#10;Enter multiple codes (one per line)" autocomplete="off" required></textarea>
               <button type="button" id="scan-btn" class="btn btn--scan" title="Scan with camera" aria-label="Scan card with camera">📷</button>
             </div>
           </div>
@@ -89,7 +89,7 @@
             <div id="qr-preview" class="qr-preview-box"></div>
             <p id="qr-hint" class="qr-hint">Enter card data above to preview</p>
           </div>
-          <button type="submit" class="btn btn--primary">Save card</button>
+          <button type="submit" id="add-submit-btn" class="btn btn--primary">Save card</button>
         </form>
       </div>
     </div>
@@ -99,6 +99,7 @@
       <header class="app-header" id="detail-header">
         <button class="back-btn icon-btn" data-target="home" aria-label="Back">&#8592;</button>
         <h2 id="detail-title"></h2>
+        <button class="icon-btn edit-btn" id="detail-edit-top" aria-label="Edit card" title="Edit card">✏️</button>
         <button class="icon-btn share-btn" id="detail-share-top" aria-label="Share card" title="Share card link">🔗</button>
         <button class="icon-btn delete-btn" id="detail-delete" aria-label="Delete card">🗑</button>
       </header>
@@ -106,6 +107,10 @@
         <div class="qr-display-card" id="qr-display-card">
           <div id="detail-qr" class="qr-code-wrap" role="img" aria-label="QR code"></div>
           <p id="detail-data" class="qr-data-label"></p>
+          <p id="detail-multi-badge" class="multi-code-badge hidden"></p>
+          <button type="button" id="shuffle-code-btn" class="btn btn--secondary btn--sm hidden" style="margin-top:10px;">
+            <span>🎲 Pick another code</span>
+          </button>
         </div>
         <div class="detail-actions">
           <button id="use-here-btn" class="btn btn--primary btn--wide">

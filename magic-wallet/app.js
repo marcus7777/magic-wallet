@@ -254,6 +254,27 @@ const Geohash = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════════
+   Card Data Helpers — support multiple codes per card
+═══════════════════════════════════════════════════════════════ */
+function parseCardData(input) {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input.map(s => String(s).trim()).filter(Boolean);
+  }
+  return String(input)
+    .split(/[\r\n,]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function normalizeCardDataForSave(input) {
+  const items = parseCardData(input);
+  if (items.length <= 1) return items[0] || '';
+  return items;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
    CardStore — CRUD over localStorage with 7-char Geohash storage
 ═══════════════════════════════════════════════════════════════ */
 const CardStore = (() => {
@@ -313,7 +334,8 @@ const CardStore = (() => {
     add(card) {
       const cards = load();
       const name = String(card.name || '').trim();
-      const data = String(card.data || '').trim();
+      const dataForSave = normalizeCardDataForSave(card.data);
+      const dataStr = parseCardData(card.data).join('\n');
       const color = String(card.color || '#6c63ff').trim().toLowerCase();
       const emoji = card.emoji || '💳';
       const locs = Array.isArray(card.locations)
@@ -322,7 +344,7 @@ const CardStore = (() => {
 
       const existingCard = cards.find(c =>
         String(c.name || '').trim() === name &&
-        String(c.data || '').trim() === data &&
+        parseCardData(c.data).join('\n') === dataStr &&
         String(c.color || '').trim().toLowerCase() === color
       );
 
@@ -343,7 +365,7 @@ const CardStore = (() => {
       const newCard = {
         id: uid(),
         name: card.name,
-        data: card.data,
+        data: dataForSave,
         emoji: emoji,
         color: card.color || '#6c63ff',
         locations: [...new Set(locs)]
@@ -373,6 +395,20 @@ const CardStore = (() => {
 
     getById(id) {
       return load().find(c => c.id === id) || null;
+    },
+
+    update(id, updates) {
+      const cards = load();
+      const card = cards.find(c => c.id === id);
+      if (!card) return null;
+
+      if (updates.name !== undefined) card.name = String(updates.name).trim();
+      if (updates.data !== undefined) card.data = normalizeCardDataForSave(updates.data);
+      if (updates.emoji !== undefined) card.emoji = String(updates.emoji).trim() || '💳';
+      if (updates.color !== undefined) card.color = String(updates.color).trim();
+
+      persist(cards);
+      return card;
     }
   };
 })();
@@ -589,8 +625,9 @@ const Scanner = (() => {
    App — wires everything together
 ═══════════════════════════════════════════════════════════════ */
 const App = (() => {
-  let currentPos  = null; // { lat, lon, accuracy }
-  let currentCard = null; // card object open in detail screen
+  let currentPos    = null; // { lat, lon, accuracy }
+  let currentCard   = null; // card object open in detail screen
+  let editingCardId = null; // card ID when editing, null when creating
 
   // ── Helpers ──────────────────────────────────────────────────
 
@@ -651,6 +688,8 @@ const App = (() => {
 
   function cardTileHTML(card) {
     const locs = card.locations?.length || 0;
+    const codesCount = parseCardData(card.data).length;
+    const codesBadge = codesCount > 1 ? ` · 🎲 ${codesCount} codes` : '';
     return `
       <div class="card-tile" style="--card-color:${esc(card.color || '#6c63ff')}" data-id="${esc(card.id)}" tabindex="0" role="button" aria-label="Open ${esc(card.name)}">
         <div class="card-tile-inner">
@@ -658,12 +697,13 @@ const App = (() => {
           <div class="card-info">
             <span class="card-name">${esc(card.name)}</span>
             ${locs > 0
-              ? `<span class="card-locs">📍 ${locs} location${locs !== 1 ? 's' : ''} saved</span>`
-              : '<span class="card-locs">No location yet</span>'}
+              ? `<span class="card-locs">📍 ${locs} location${locs !== 1 ? 's' : ''} saved${codesBadge}</span>`
+              : `<span class="card-locs">No location yet${codesBadge}</span>`}
           </div>
           <span class="card-chevron">›</span>
         </div>
       </div>`;
+  }
   }
 
   function featuredCardHTML(card) {
@@ -758,6 +798,39 @@ const App = (() => {
 
   // ── Card Detail Screen ────────────────────────────────────────
 
+  let activeDataIndex = 0;
+
+  function renderCardCode(card, index) {
+    const items = parseCardData(card.data);
+    if (!items.length) {
+      document.getElementById('detail-data').textContent = '';
+      QR.render(document.getElementById('detail-qr'), '');
+      return;
+    }
+
+    activeDataIndex = ((index % items.length) + items.length) % items.length;
+    const activeData = items[activeDataIndex];
+
+    document.getElementById('detail-data').textContent = activeData;
+    QR.render(document.getElementById('detail-qr'), activeData);
+
+    const badge = document.getElementById('detail-multi-badge');
+    const shuffleBtn = document.getElementById('shuffle-code-btn');
+
+    if (items.length > 1) {
+      if (badge) {
+        badge.textContent = `🎲 Code ${activeDataIndex + 1} of ${items.length} (randomized)`;
+        badge.classList.remove('hidden');
+      }
+      if (shuffleBtn) {
+        shuffleBtn.classList.remove('hidden');
+      }
+    } else {
+      if (badge) badge.classList.add('hidden');
+      if (shuffleBtn) shuffleBtn.classList.add('hidden');
+    }
+  }
+
   function openCard(id) {
     const card = CardStore.getById(id);
     if (!card) return;
@@ -767,9 +840,10 @@ const App = (() => {
     header.style.borderTopColor = card.color || '#6c63ff';
 
     document.getElementById('detail-title').textContent = `${card.emoji || '💳'} ${card.name}`;
-    document.getElementById('detail-data').textContent  = card.data;
 
-    QR.render(document.getElementById('detail-qr'), card.data);
+    const items = parseCardData(card.data);
+    const randomIndex = items.length > 1 ? Math.floor(Math.random() * items.length) : 0;
+    renderCardCode(card, randomIndex);
 
     const accEl = document.getElementById('location-accuracy');
     if (currentPos) {
@@ -953,9 +1027,10 @@ const App = (() => {
 
     dataInput.addEventListener('input', () => {
       const val = dataInput.value.trim();
-      if (val) {
-        hint.textContent = '';
-        QR.render(preview, val);
+      const items = parseCardData(val);
+      if (items.length) {
+        hint.textContent = items.length > 1 ? `✨ ${items.length} codes entered — first code shown in preview` : '';
+        QR.render(preview, items[0]);
       } else {
         preview.innerHTML = '';
         hint.textContent  = 'Enter card data above to preview';
@@ -970,9 +1045,14 @@ const App = (() => {
       scanBtn.addEventListener('click', async () => {
         try {
           const scanned = await Scanner.open();
-          dataInput.value = scanned;
+          if (dataInput.value.trim()) {
+            dataInput.value = dataInput.value.trim() + '\n' + scanned;
+          } else {
+            dataInput.value = scanned;
+          }
           dataInput.dispatchEvent(new Event('input'));
-          toast('✓ Scanned! Check the data and save your card.');
+          const count = parseCardData(dataInput.value).length;
+          toast(`✓ Scanned code! (${count} code${count !== 1 ? 's' : ''} total)`);
         } catch (err) {
           if (err.message === 'cancelled') return;
           if (err.name === 'NotAllowedError') {
@@ -1013,31 +1093,124 @@ const App = (() => {
         return;
       }
 
-      const savedCard = CardStore.add({ name, data, emoji, color });
-      document.getElementById('add-form').reset();
-      document.getElementById('card-emoji').value = '💳';
-      preview.innerHTML = '';
-      hint.textContent  = 'Enter card data above to preview';
-
-      showScreen('home', 'back');
-      renderHome();
-      if (savedCard.isMerged) {
-        toast(`✓ Merged location data for ${emoji} ${name}`);
+      if (editingCardId) {
+        const updated = CardStore.update(editingCardId, { name, data, emoji, color });
+        resetAddForm();
+        if (updated) {
+          openCard(updated.id);
+          toast(`✓ ${emoji} ${name} updated`);
+        } else {
+          showScreen('home', 'back');
+          renderHome();
+        }
       } else {
-        toast(`✓ ${emoji} ${name} added to your wallet`);
+        const savedCard = CardStore.add({ name, data, emoji, color });
+        resetAddForm();
+        showScreen('home', 'back');
+        renderHome();
+        if (savedCard.isMerged) {
+          toast(`✓ Merged location data for ${emoji} ${name}`);
+        } else {
+          toast(`✓ ${emoji} ${name} added to your wallet`);
+        }
       }
     });
+  }
+
+  function resetAddForm() {
+    editingCardId = null;
+    const form = document.getElementById('add-form');
+    if (form) form.reset();
+    const emojiInput = document.getElementById('card-emoji');
+    if (emojiInput) emojiInput.value = '💳';
+
+    const title = document.getElementById('add-screen-title');
+    if (title) title.textContent = 'New card';
+    const submitBtn = document.getElementById('add-submit-btn');
+    if (submitBtn) submitBtn.textContent = 'Save card';
+
+    const colorInput = document.getElementById('card-color');
+    if (colorInput) colorInput.value = '#6c63ff';
+
+    document.querySelectorAll('.swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color === '#6c63ff');
+    });
+
+    const preview = document.getElementById('qr-preview');
+    const hint = document.getElementById('qr-hint');
+    if (preview) preview.innerHTML = '';
+    if (hint) hint.textContent = 'Enter card data above to preview';
+  }
+
+  function openEditCard(card) {
+    if (!card) return;
+    editingCardId = card.id;
+
+    const title = document.getElementById('add-screen-title');
+    if (title) title.textContent = 'Edit card';
+    const submitBtn = document.getElementById('add-submit-btn');
+    if (submitBtn) submitBtn.textContent = 'Update card';
+
+    document.getElementById('card-emoji').value = card.emoji || '💳';
+    document.getElementById('card-name').value = card.name || '';
+
+    const items = parseCardData(card.data);
+    document.getElementById('card-data').value = items.join('\n');
+
+    const color = card.color || '#6c63ff';
+    const colorInput = document.getElementById('card-color');
+    if (colorInput) colorInput.value = color;
+
+    document.querySelectorAll('.swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color === color);
+    });
+
+    const dataInput = document.getElementById('card-data');
+    if (dataInput) dataInput.dispatchEvent(new Event('input'));
+
+    showScreen('add');
   }
 
   // ── Event Binding ─────────────────────────────────────────────
 
   function bindGlobalEvents() {
-    document.getElementById('add-btn').addEventListener('click', () => showScreen('add'));
+    document.getElementById('add-btn').addEventListener('click', () => {
+      resetAddForm();
+      showScreen('add');
+    });
+
+    const editBtn = document.getElementById('detail-edit-top');
+    if (editBtn) {
+      editBtn.addEventListener('click', () => {
+        if (currentCard) openEditCard(currentCard);
+      });
+    }
+
+    const shuffleBtn = document.getElementById('shuffle-code-btn');
+    if (shuffleBtn) {
+      shuffleBtn.addEventListener('click', () => {
+        if (!currentCard) return;
+        const items = parseCardData(currentCard.data);
+        if (items.length <= 1) return;
+        let nextIndex = Math.floor(Math.random() * items.length);
+        if (nextIndex === activeDataIndex && items.length > 1) {
+          nextIndex = (activeDataIndex + 1) % items.length;
+        }
+        renderCardCode(currentCard, nextIndex);
+        toast(`🎲 Switched to code ${nextIndex + 1} of ${items.length}`);
+      });
+    }
 
     document.querySelectorAll('.back-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        showScreen('home', 'back');
-        renderHome();
+        if (editingCardId && currentCard) {
+          editingCardId = null;
+          showScreen('detail', 'back');
+        } else {
+          editingCardId = null;
+          showScreen('home', 'back');
+          renderHome();
+        }
       });
     });
 

@@ -571,14 +571,48 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
 }
 
 
-/* ── Scan Button ────────────────────────────────────────────── */
+/* ── Scan Button & Textarea ──────────────────────────────────── */
 .scan-input-row {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
 }
 .scan-input-row input {
   flex: 1;
+}
+textarea#card-data {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: .95rem;
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 52px;
+  outline: none;
+  transition: border-color .15s;
+  line-height: 1.4;
+}
+textarea#card-data:focus {
+  border-color: var(--accent);
+}
+.multi-code-badge {
+  font-size: .78rem;
+  color: #a5b4fc;
+  background: rgba(108, 99, 255, 0.15);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  padding: 4px 12px;
+  border-radius: 99px;
+  margin-top: 8px;
+  display: inline-block;
+  font-weight: 500;
+}
+.btn--sm {
+  padding: 8px 16px;
+  font-size: .85rem;
+  border-radius: var(--radius-sm);
 }
 .btn--scan {
   background: var(--surface-3);
