@@ -308,14 +308,39 @@ const CardStore = (() => {
 
     add(card) {
       const cards = load();
+      const name = String(card.name || '').trim();
+      const data = String(card.data || '').trim();
+      const color = String(card.color || '#6c63ff').trim().toLowerCase();
+      const emoji = card.emoji || '💳';
       const locs = Array.isArray(card.locations)
         ? card.locations.map(l => String(l).slice(0, 7)).filter(l => l.length === 7)
         : [];
+
+      const existingCard = cards.find(c =>
+        String(c.name || '').trim() === name &&
+        String(c.data || '').trim() === data &&
+        String(c.color || '').trim().toLowerCase() === color
+      );
+
+      if (existingCard) {
+        existingCard.locations = existingCard.locations || [];
+        const mergedLocs = [...new Set([...existingCard.locations, ...locs])];
+        if (mergedLocs.length > 20) {
+          mergedLocs.splice(0, mergedLocs.length - 20);
+        }
+        existingCard.locations = mergedLocs;
+        if (emoji && emoji !== '💳' && existingCard.emoji === '💳') {
+          existingCard.emoji = emoji;
+        }
+        persist(cards);
+        return { ...existingCard, isMerged: true };
+      }
+
       const newCard = {
         id: uid(),
         name: card.name,
         data: card.data,
-        emoji: card.emoji || '💳',
+        emoji: emoji,
         color: card.color || '#6c63ff',
         locations: [...new Set(locs)]
       };
@@ -892,7 +917,11 @@ const App = (() => {
           locations: locs
         });
 
-        toast(`✓ Added ${newCard.emoji} ${newCard.name} to your wallet!`);
+        if (newCard.isMerged) {
+          toast(`✓ Merged location data for ${newCard.emoji} ${newCard.name}`);
+        } else {
+          toast(`✓ Added ${newCard.emoji} ${newCard.name} to your wallet!`);
+        }
         openCard(newCard.id);
         return true;
       }
@@ -972,7 +1001,7 @@ const App = (() => {
         return;
       }
 
-      CardStore.add({ name, data, emoji, color });
+      const savedCard = CardStore.add({ name, data, emoji, color });
       document.getElementById('add-form').reset();
       document.getElementById('card-emoji').value = '💳';
       preview.innerHTML = '';
@@ -980,7 +1009,11 @@ const App = (() => {
 
       showScreen('home', 'back');
       renderHome();
-      toast(`✓ ${emoji} ${name} added to your wallet`);
+      if (savedCard.isMerged) {
+        toast(`✓ Merged location data for ${emoji} ${name}`);
+      } else {
+        toast(`✓ ${emoji} ${name} added to your wallet`);
+      }
     });
   }
 
