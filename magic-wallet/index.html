@@ -21,6 +21,7 @@
           <h1>Magic Wallet</h1>
         </div>
         <span id="location-status" class="location-badge" aria-live="polite"></span>
+        <button id="refresh-btn" class="icon-btn refresh-btn" onclick="location.reload()" aria-label="Refresh app" title="Refresh app">🔄</button>
       </header>
       <div class="scroll-container">
         <section id="suggested-section" class="suggested-section hidden" aria-label="Suggested card">
@@ -29,7 +30,15 @@
         </section>
         <section aria-label="All cards">
           <p class="section-label">Your cards</p>
-          <div id="cards-list" class="cards-list"></div>
+          <div id="cards-list" class="cards-list">
+            <div class="card-skeleton">
+              <span class="skeleton-emoji">💳</span>
+              <div class="skeleton-info">
+                <div class="skeleton-line short"></div>
+                <div class="skeleton-line long"></div>
+              </div>
+            </div>
+          </div>
         </section>
       </div>
       <button id="add-btn" class="fab" aria-label="Add new card" title="Add card">+</button>
@@ -136,9 +145,8 @@
       </div>
       <p id="scan-status" class="scan-status">Starting camera…</p>
     </div>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsurl@0.1.5/lib/jsurl.js"></script>
+  <script src="vendor/qrcode.js"></script>
+  <script src="vendor/jsQR.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -300,7 +300,11 @@ const CardStore = (() => {
   }
 
   function persist(cards) {
-    localStorage.setItem(KEY, JSON.stringify(cards));
+    try {
+      localStorage.setItem(KEY, JSON.stringify(cards));
+    } catch (err) {
+      console.error('Failed to save to localStorage:', err);
+    }
   }
 
   return {
@@ -435,6 +439,10 @@ const QR = (() => {
   function render(container, data) {
     container.innerHTML = '';
     if (!data || !data.trim()) return;
+    if (typeof qrcode === 'undefined') {
+      container.innerHTML = '<p style="color:#888;font-size:.8rem;text-align:center">QR library loading…</p>';
+      return;
+    }
 
     let qr;
     for (const type of [0, 3, 6, 10, 15, 25, 40]) {
@@ -629,7 +637,11 @@ const App = (() => {
     };
 
     if (document.startViewTransition) {
-      document.startViewTransition(run);
+      try {
+        document.startViewTransition(run);
+      } catch (_) {
+        run();
+      }
     } else {
       run();
     }
@@ -1046,6 +1058,21 @@ const App = (() => {
     if (shareBtn) shareBtn.addEventListener('click', shareCard);
     const topShareBtn = document.getElementById('detail-share-top');
     if (topShareBtn) topShareBtn.addEventListener('click', shareCard);
+
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        toast('🔄 Reloading app…');
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.update();
+          } catch (_) {}
+        }
+        setTimeout(() => location.reload(true), 150);
+      });
+    }
   }
 
   // ── Public init ───────────────────────────────────────────────
@@ -1069,7 +1096,27 @@ window.CardStore = CardStore;
 window.Location = Location;
 window.App = App;
 
-document.addEventListener('DOMContentLoaded', () => App.init());
+window.addEventListener('error', (e) => {
+  console.error('Global error caught:', e.error || e.message);
+  const status = document.getElementById('location-status');
+  if (status && !status.textContent) {
+    status.textContent = '⚠️ Error occurred — tap 🔄';
+  }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    App.init();
+  } catch (err) {
+    console.error('Failed to initialize Magic Wallet:', err);
+    try {
+      const cardsList = document.getElementById('cards-list');
+      if (cardsList) {
+        cardsList.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Unable to initialize wallet. Tap 🔄 above to reload.</p>';
+      }
+    } catch (_) {}
+  }
+});
 
 // Register Service Worker for offline support
 if ('serviceWorker' in navigator) {

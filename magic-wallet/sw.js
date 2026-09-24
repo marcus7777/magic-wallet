@@ -1,4 +1,4 @@
-const CACHE_NAME = 'magic-wallet-v2';
+const CACHE_NAME = 'magic-wallet-v3';
 
 const PRECACHE_ASSETS = [
   './',
@@ -7,9 +7,8 @@ const PRECACHE_ASSETS = [
   'app.js',
   'manifest.json',
   'icon.svg',
-  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-  'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js',
-  'https://cdn.jsdelivr.net/npm/jsurl@0.1.5/lib/jsurl.js'
+  'vendor/qrcode.js',
+  'vendor/jsQR.js'
 ];
 
 // Install event: Pre-cache core app shell and external dependencies

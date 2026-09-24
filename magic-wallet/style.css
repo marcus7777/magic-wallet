@@ -58,11 +58,13 @@ html, body {
 
 /* ── Header ─────────────────────────────────────────────────── */
 .app-header {
-  height: var(--header-h);
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 20px;
+  padding-left: 20px;
+  padding-right: 20px;
   background: rgba(10,10,15,.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -162,6 +164,39 @@ html, body {
   flex-direction: column;
   gap: 10px;
 }
+
+/* ── Skeleton Loader ────────────────────────────────────────── */
+.card-skeleton {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: var(--radius);
+  padding: 14px 16px 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.skeleton-emoji {
+  font-size: 1.9rem;
+  opacity: 0.5;
+}
+
+.skeleton-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.skeleton-line {
+  background: var(--surface-3);
+  border-radius: 4px;
+  height: 12px;
+}
+
+.skeleton-line.short { width: 40%; }
+.skeleton-line.long  { width: 70%; }
 
 /* ── Card Tile ──────────────────────────────────────────────── */
 .card-tile {
