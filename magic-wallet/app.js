@@ -1037,3 +1037,12 @@ window.Location = Location;
 window.App = App;
 
 document.addEventListener('DOMContentLoaded', () => App.init());
+
+// Register Service Worker for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('ServiceWorker registered:', reg.scope))
+      .catch(err => console.error('ServiceWorker registration failed:', err));
+  });
+}
