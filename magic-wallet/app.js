@@ -704,7 +704,6 @@ const App = (() => {
         </div>
       </div>`;
   }
-  }
 
   function featuredCardHTML(card) {
     return `

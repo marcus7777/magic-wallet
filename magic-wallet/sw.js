@@ -1,4 +1,4 @@
-const CACHE_NAME = 'magic-wallet-v5';
+const CACHE_NAME = 'magic-wallet-v6';
 
 const PRECACHE_ASSETS = [
   './',
@@ -46,6 +46,7 @@ self.addEventListener('activate', event => {
 // Fetch event: Cache-first, fallback to network
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  if (!event.request.url.startsWith('http')) return;
 
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
@@ -53,21 +54,18 @@ self.addEventListener('fetch', event => {
         return cachedResponse;
       }
       return fetch(event.request).then(response => {
-        if (!response || response.status !== 200 || response.type !== 'basic' && response.type !== 'cors') {
-          return response;
+        if (response && response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseToCache);
+          }).catch(() => {});
         }
-
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, responseToCache);
-        });
-
         return response;
-      }).catch(() => {
-        // Offline fallback for navigation requests
+      }).catch(err => {
         if (event.request.mode === 'navigate') {
           return caches.match('index.html') || caches.match('./');
         }
+        return new Response('Offline', { status: 503, statusText: 'Offline' });
       });
     })
   );
