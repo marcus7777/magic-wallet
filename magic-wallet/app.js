@@ -458,8 +458,23 @@ const Location = (() => {
             lon:      coords.longitude,
             accuracy: Math.round(coords.accuracy),
           }),
-          reject,
-          { timeout: 9000, maximumAge: 60_000, enableHighAccuracy: true }
+          err => {
+            if (err.code === err.TIMEOUT) {
+              // Retry without high accuracy (common Firefox desktop timeout fallback)
+              navigator.geolocation.getCurrentPosition(
+                ({ coords }) => resolve({
+                  lat:      coords.latitude,
+                  lon:      coords.longitude,
+                  accuracy: Math.round(coords.accuracy),
+                }),
+                reject,
+                { timeout: 10000, maximumAge: 120_000, enableHighAccuracy: false }
+              );
+            } else {
+              reject(err);
+            }
+          },
+          { timeout: 8000, maximumAge: 60_000, enableHighAccuracy: true }
         );
       });
     }
@@ -554,12 +569,16 @@ const Scanner = (() => {
       const onClose  = () => { close(); reject(new Error('cancelled')); };
       closeBtn.addEventListener('click', onClose, { once: true });
 
-      navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
+      const getStream = () => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
+        .catch(() => navigator.mediaDevices.getUserMedia({ video: true }));
+
+      getStream()
         .then(async s => {
           stream = s;
           video.srcObject = s;
-          await video.play();
+          try {
+            await video.play();
+          } catch (_) {}
 
           detector = detector || await initDetector();
           status.textContent = detector
@@ -569,7 +588,7 @@ const Scanner = (() => {
           const tick = async () => {
             if (!stream) return;
 
-            if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+            if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
               canvas.width  = video.videoWidth;
               canvas.height = video.videoHeight;
               ctx.drawImage(video, 0, 0);
@@ -608,10 +627,14 @@ const Scanner = (() => {
       } catch (_) { }
     }
 
-    if (typeof jsQR !== 'undefined') {
-      const { data: px, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(px, width, height, { inversionAttempts: 'dontInvert' });
-      if (code) return code.data;
+    if (typeof jsQR !== 'undefined' && canvas.width > 0 && canvas.height > 0) {
+      try {
+        const { data: px, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        if (px && width > 0 && height > 0) {
+          const code = jsQR(px, width, height, { inversionAttempts: 'dontInvert' });
+          if (code) return code.data;
+        }
+      } catch (_) {}
     }
 
     return null;
@@ -673,7 +696,7 @@ const App = (() => {
       incoming.classList.add('active');
     };
 
-    if (document.startViewTransition) {
+    if (typeof document.startViewTransition === 'function') {
       try {
         document.startViewTransition(run);
       } catch (_) {
