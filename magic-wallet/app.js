@@ -273,6 +273,18 @@ function normalizeCardDataForSave(input) {
   return items;
 }
 
+function getCardFormat(card) {
+  if (card && (card.format === 'qr' || card.format === 'barcode')) {
+    return card.format;
+  }
+  const items = parseCardData(card ? card.data : '');
+  const firstCode = items[0] || '';
+  if (/^\d{8,18}$/.test(firstCode.trim())) {
+    return 'barcode';
+  }
+  return 'qr';
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    CardStore — CRUD over localStorage with 7-char Geohash storage
@@ -338,6 +350,9 @@ const CardStore = (() => {
       const dataStr = parseCardData(card.data).join('\n');
       const color = String(card.color || '#6c63ff').trim().toLowerCase();
       const emoji = card.emoji || '💳';
+      const format = (card.format === 'barcode' || card.format === 'qr')
+        ? card.format
+        : getCardFormat({ data: dataForSave });
       const locs = Array.isArray(card.locations)
         ? card.locations.map(l => String(l).slice(0, 7)).filter(l => l.length === 7)
         : [];
@@ -358,6 +373,9 @@ const CardStore = (() => {
         if (emoji && emoji !== '💳' && existingCard.emoji === '💳') {
           existingCard.emoji = emoji;
         }
+        if (card.format) {
+          existingCard.format = card.format;
+        }
         persist(cards);
         return { ...existingCard, isMerged: true };
       }
@@ -368,6 +386,7 @@ const CardStore = (() => {
         data: dataForSave,
         emoji: emoji,
         color: card.color || '#6c63ff',
+        format: format,
         locations: [...new Set(locs)]
       };
       cards.push(newCard);
@@ -406,7 +425,21 @@ const CardStore = (() => {
       if (updates.data !== undefined) card.data = normalizeCardDataForSave(updates.data);
       if (updates.emoji !== undefined) card.emoji = String(updates.emoji).trim() || '💳';
       if (updates.color !== undefined) card.color = String(updates.color).trim();
+      if (updates.format !== undefined) {
+        if (updates.format === 'barcode' || updates.format === 'qr') {
+          card.format = updates.format;
+        }
+      }
 
+      persist(cards);
+      return card;
+    },
+
+    updateFormat(id, format) {
+      const cards = load();
+      const card = cards.find(c => c.id === id);
+      if (!card) return null;
+      card.format = format === 'barcode' ? 'barcode' : 'qr';
       persist(cards);
       return card;
     }
@@ -899,16 +932,35 @@ const App = (() => {
       </div>`;
   }
 
-  function featuredCardHTML(card) {
+  function featuredCardHTML(card, format) {
+    const items = parseCardData(card.data);
+    const activeData = items[0] || '';
+    const isBarcode = format === 'barcode';
+    const switchLabel = isBarcode ? '🔳 QR Code' : '║▌║ Barcode';
+    const multiBadge = items.length > 1 ? ` · 🎲 ${items.length} codes` : '';
+
     return `
-      <div class="card-tile card-tile--featured" style="--card-color:${esc(card.color || '#6c63ff')}" data-id="${esc(card.id)}" tabindex="0" role="button" aria-label="Open suggested card ${esc(card.name)}">
-        <div class="card-tile-featured-inner">
-          <div class="featured-info">
-            <span class="card-emoji" style="font-size:2.2rem">${esc(card.emoji || '💳')}</span>
-            <div class="card-name" style="font-size:1.15rem;font-weight:700;margin-top:6px">${esc(card.name)}</div>
-            <div class="featured-hint">Tap to open full QR</div>
+      <div class="card-tile card-tile--featured" style="--card-color:${esc(card.color || '#6c63ff')}" data-id="${esc(card.id)}">
+        <div class="card-tile-featured-header" id="featured-card-header">
+          <div class="featured-title-wrap">
+            <span class="card-emoji" style="font-size:1.8rem">${esc(card.emoji || '💳')}</span>
+            <div class="featured-name-block">
+              <span class="card-name">${esc(card.name)}</span>
+              <span class="featured-badge">📍 Nearby${multiBadge}</span>
+            </div>
           </div>
-          <div class="featured-qr" id="featured-qr-box"></div>
+          <button type="button" class="btn btn--secondary btn--sm featured-format-btn" id="featured-format-btn" title="Switch format and remember selection">
+            Switch to ${switchLabel}
+          </button>
+        </div>
+        <div class="featured-code-card">
+          <div class="featured-code-wrap ${isBarcode ? 'format-barcode' : 'format-qr'}" id="featured-qr-box" role="button" tabindex="0" title="Tap code to switch format (QR / Barcode)" aria-label="Tap code to switch format"></div>
+          <p class="featured-data-label">${esc(activeData)}</p>
+        </div>
+        <div class="featured-footer">
+          <button type="button" class="btn btn--primary btn--sm featured-open-btn" id="featured-open-btn">
+            Open full card ›
+          </button>
         </div>
       </div>`;
   }
@@ -971,15 +1023,62 @@ const App = (() => {
     const section = document.getElementById('suggested-section');
     const wrap    = document.getElementById('suggested-card');
     section.classList.remove('hidden');
-    wrap.innerHTML = featuredCardHTML(card);
 
-    const qrBox = document.getElementById('featured-qr-box');
-    if (qrBox) QR.render(qrBox, card.data);
+    const currentFormat = getCardFormat(card);
+    wrap.innerHTML = featuredCardHTML(card, currentFormat);
 
-    wrap.querySelector('.card-tile').addEventListener('click', () => openCard(card.id));
-    wrap.querySelector('.card-tile').addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') openCard(card.id);
-    });
+    const codeBox = document.getElementById('featured-qr-box');
+    const items = parseCardData(card.data);
+    const activeData = items[0] || '';
+
+    if (codeBox && activeData) {
+      if (currentFormat === 'barcode') {
+        Barcode.render(codeBox, activeData);
+      } else {
+        QR.render(codeBox, activeData);
+      }
+    }
+
+    const switchFormat = (e) => {
+      e.stopPropagation();
+      const newFormat = currentFormat === 'qr' ? 'barcode' : 'qr';
+      CardStore.updateFormat(card.id, newFormat);
+      card.format = newFormat;
+      toast(`Saved format: ${newFormat === 'barcode' ? 'Barcode ║▌║' : 'QR Code 🔳'}`);
+      showSuggested(card);
+    };
+
+    const formatBtn = wrap.querySelector('#featured-format-btn');
+    if (formatBtn) {
+      formatBtn.addEventListener('click', switchFormat);
+    }
+
+    if (codeBox) {
+      codeBox.addEventListener('click', switchFormat);
+      codeBox.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          switchFormat(e);
+        }
+      });
+    }
+
+    const openBtn = wrap.querySelector('#featured-open-btn');
+    if (openBtn) {
+      openBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCard(card.id);
+      });
+    }
+
+    const headerEl = wrap.querySelector('#featured-card-header');
+    if (headerEl) {
+      headerEl.addEventListener('click', (e) => {
+        if (!e.target.closest('#featured-format-btn')) {
+          openCard(card.id);
+        }
+      });
+    }
   }
 
   function hideSuggested() {
@@ -1067,9 +1166,11 @@ const App = (() => {
   function toggleCodeFormat() {
     if (!currentCard) return;
     currentCodeFormat = (currentCodeFormat === 'qr') ? 'barcode' : 'qr';
+    CardStore.updateFormat(currentCard.id, currentCodeFormat);
+    currentCard.format = currentCodeFormat;
     renderCardCode(currentCard, activeDataIndex, currentCodeFormat);
     const formatName = currentCodeFormat === 'barcode' ? 'Barcode ║▌║' : 'QR Code 🔳';
-    toast(`Switched to ${formatName}`);
+    toast(`Saved format: ${formatName}`);
   }
 
   function openCard(id) {
@@ -1085,12 +1186,7 @@ const App = (() => {
     const items = parseCardData(card.data);
     const randomIndex = items.length > 1 ? Math.floor(Math.random() * items.length) : 0;
 
-    const firstCode = items[0] || '';
-    if (/^\d{8,18}$/.test(firstCode.trim())) {
-      currentCodeFormat = 'barcode';
-    } else {
-      currentCodeFormat = 'qr';
-    }
+    currentCodeFormat = getCardFormat(card);
 
     renderCardCode(card, randomIndex, currentCodeFormat);
 
