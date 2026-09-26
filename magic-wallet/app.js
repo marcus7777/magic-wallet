@@ -418,6 +418,10 @@ const CardStore = (() => {
    Location — Geolocation + Geohash 7-char matching (exact + 8 neighbors)
 ═══════════════════════════════════════════════════════════════ */
 const Location = (() => {
+  let cachedPos = null;
+  let cachedPosTime = 0;
+  let pendingPromise = null;
+
   return {
     /**
      * Checks if current location (lat, lon) matches any card location geohash
@@ -446,37 +450,78 @@ const Location = (() => {
       return null;
     },
 
-    /** Wraps navigator.geolocation.getCurrentPosition in a Promise. */
-    getPosition() {
-      return new Promise((resolve, reject) => {
+    /**
+     * Gets current position cached or via navigator.geolocation.
+     * Handles Firefox-specific fallback (POSITION_UNAVAILABLE & TIMEOUT)
+     * and deduplicates concurrent geolocation calls.
+     */
+    getPosition(options = {}) {
+      const forceFresh = options.forceFresh || false;
+      const cacheMaxAgeMs = options.cacheMaxAgeMs || 120_000;
+      const now = Date.now();
+
+      if (!forceFresh && cachedPos && (now - cachedPosTime < cacheMaxAgeMs)) {
+        return Promise.resolve(cachedPos);
+      }
+
+      if (pendingPromise) {
+        return pendingPromise;
+      }
+
+      pendingPromise = new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
+          pendingPromise = null;
           return reject(new Error('Geolocation not supported by this browser'));
         }
-        navigator.geolocation.getCurrentPosition(
-          ({ coords }) => resolve({
+
+        const handleSuccess = ({ coords }) => {
+          const pos = {
             lat:      coords.latitude,
             lon:      coords.longitude,
             accuracy: Math.round(coords.accuracy),
-          }),
-          err => {
-            if (err.code === err.TIMEOUT) {
-              // Retry without high accuracy (common Firefox desktop timeout fallback)
-              navigator.geolocation.getCurrentPosition(
-                ({ coords }) => resolve({
-                  lat:      coords.latitude,
-                  lon:      coords.longitude,
-                  accuracy: Math.round(coords.accuracy),
-                }),
-                reject,
-                { timeout: 10000, maximumAge: 120_000, enableHighAccuracy: false }
-              );
-            } else {
-              reject(err);
-            }
-          },
+            timestamp: Date.now()
+          };
+          cachedPos = pos;
+          cachedPosTime = pos.timestamp;
+          pendingPromise = null;
+          resolve(pos);
+        };
+
+        const handlePrimaryError = (err) => {
+          if (err && err.code === 1 /* PERMISSION_DENIED */) {
+            pendingPromise = null;
+            return reject(err);
+          }
+
+          // Firefox desktop/mobile commonly returns POSITION_UNAVAILABLE (2) or TIMEOUT (3)
+          // when enableHighAccuracy: true is requested without dedicated GPS hardware.
+          // Retry with low accuracy (enableHighAccuracy: false) and extended timeout & maximumAge.
+          navigator.geolocation.getCurrentPosition(
+            handleSuccess,
+            (fallbackErr) => {
+              pendingPromise = null;
+              if (cachedPos) {
+                resolve(cachedPos);
+              } else {
+                reject(fallbackErr);
+              }
+            },
+            { timeout: 15000, maximumAge: 300_000, enableHighAccuracy: false }
+          );
+        };
+
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          handlePrimaryError,
           { timeout: 8000, maximumAge: 60_000, enableHighAccuracy: true }
         );
       });
+
+      return pendingPromise;
+    },
+
+    getCachedPosition() {
+      return cachedPos;
     }
   };
 })();
@@ -750,8 +795,24 @@ const App = (() => {
 
     // Location check
     const badge = document.getElementById('location-status');
-    badge.textContent = '📍 locating…';
-    badge.className   = 'location-badge';
+
+    if (currentPos) {
+      const match = Location.findNearest(cards, currentPos.lat, currentPos.lon);
+      if (match) {
+        badge.textContent = match.matchType === 'exact'
+          ? `📍 Near ${match.card.name} (exact)`
+          : `📍 Near ${match.card.name}`;
+        badge.className   = 'location-badge location-badge--matched';
+        showSuggested(match.card);
+      } else {
+        badge.textContent = '📍 Ready';
+        badge.className   = 'location-badge';
+        hideSuggested();
+      }
+    } else {
+      badge.textContent = '📍 locating…';
+      badge.className   = 'location-badge';
+    }
 
     Location.getPosition()
       .then(pos => {
@@ -770,11 +831,13 @@ const App = (() => {
           hideSuggested();
         }
       })
-      .catch(() => {
-        currentPos        = null;
-        badge.textContent = '🚫 No location';
-        badge.className   = 'location-badge location-badge--error';
-        hideSuggested();
+      .catch(err => {
+        if (!currentPos || (err && err.code === 1 /* PERMISSION_DENIED */)) {
+          currentPos        = null;
+          badge.textContent = '🚫 No location';
+          badge.className   = 'location-badge location-badge--error';
+          hideSuggested();
+        }
       });
   }
 
@@ -910,7 +973,7 @@ const App = (() => {
     label.textContent = '📍 Getting location…';
 
     try {
-      const pos  = await Location.getPosition();
+      const pos  = await Location.getPosition({ forceFresh: true });
       currentPos = pos;
       const geohash = Geohash.encode(pos.lat, pos.lon, 7);
       const updated = CardStore.addLocationGeohash(currentCard.id, geohash);
