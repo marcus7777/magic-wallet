@@ -576,6 +576,132 @@ const QR = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════════
+   Barcode — generates 1D Code128 vector barcodes as SVG
+═══════════════════════════════════════════════════════════════ */
+const Barcode = (() => {
+  const PATTERNS = [
+    '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+    '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+    '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+    '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+    '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+    '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+    '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+    '112412','122114','122411','142112','142211','241211','221114','411112','134111','111242',
+    '121142','121241','114212','124112','124211','411212','421112','421211','212141','214121',
+    '412121','111143','111341','131141','114113','114311','411113','411311','113141','114131',
+    '311141','411131','211412','211214','211232','2331112'
+  ];
+
+  function encode(data) {
+    if (!data || typeof data !== 'string') return null;
+    const cleanData = data.trim();
+    if (!cleanData) return null;
+
+    const isAllDigits = /^\d+$/.test(cleanData);
+    const symbols = [];
+
+    if (isAllDigits && cleanData.length >= 2) {
+      symbols.push(104);
+      let i = 0;
+      while (i < cleanData.length) {
+        if (i <= cleanData.length - 2) {
+          const val = parseInt(cleanData.slice(i, i + 2), 10);
+          symbols.push(val);
+          i += 2;
+        } else {
+          symbols.push(100);
+          symbols.push(cleanData.charCodeAt(i) - 32);
+          i++;
+        }
+      }
+    } else {
+      symbols.push(103);
+      for (let i = 0; i < cleanData.length; i++) {
+        const code = cleanData.charCodeAt(i);
+        if (code >= 32 && code <= 126) {
+          symbols.push(code - 32);
+        } else {
+          symbols.push(31);
+        }
+      }
+    }
+
+    let checksum = symbols[0];
+    for (let i = 1; i < symbols.length; i++) {
+      checksum += symbols[i] * i;
+    }
+    symbols.push(checksum % 103);
+    symbols.push(105);
+
+    let moduleStr = '';
+    for (const symIdx of symbols) {
+      const pat = PATTERNS[symIdx];
+      if (!pat) return null;
+      let isBar = true;
+      for (let j = 0; j < pat.length; j++) {
+        const w = parseInt(pat[j], 10);
+        moduleStr += (isBar ? '1' : '0').repeat(w);
+        isBar = !isBar;
+      }
+    }
+
+    return moduleStr;
+  }
+
+  function render(container, data) {
+    container.innerHTML = '';
+    if (!data || !data.trim()) return;
+
+    const moduleStr = encode(data);
+    if (!moduleStr) {
+      container.innerHTML = '<p style="color:#888;font-size:.8rem;text-align:center">Unable to render barcode</p>';
+      return;
+    }
+
+    const quietZone = 10;
+    const totalModules = moduleStr.length + quietZone * 2;
+    const barHeight = 70;
+    const svgWidth = totalModules * 2;
+    const svgHeight = barHeight + 24;
+
+    let rectsHTML = '';
+    let inBar = false;
+    let barStart = 0;
+
+    for (let i = 0; i < moduleStr.length; i++) {
+      const isBlack = moduleStr[i] === '1';
+      if (isBlack && !inBar) {
+        inBar = true;
+        barStart = i;
+      } else if (!isBlack && inBar) {
+        inBar = false;
+        const width = i - barStart;
+        const x = (quietZone + barStart) * 2;
+        rectsHTML += `<rect x="${x}" y="8" width="${width * 2}" height="${barHeight}" fill="#000" />`;
+      }
+    }
+    if (inBar) {
+      const width = moduleStr.length - barStart;
+      const x = (quietZone + barStart) * 2;
+      rectsHTML += `<rect x="${x}" y="8" width="${width * 2}" height="${barHeight}" fill="#000" />`;
+    }
+
+    const cleanLabel = data.trim();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" style="width:100%;height:auto;max-height:140px;background:#fff;border-radius:8px;padding:6px;box-sizing:border-box;">
+      <rect width="100%" height="100%" fill="#fff" rx="8" />
+      ${rectsHTML}
+      <text x="50%" y="${svgHeight - 2}" font-family="monospace" font-size="11" font-weight="bold" fill="#000" text-anchor="middle">${cleanLabel}</text>
+    </svg>`;
+
+    container.innerHTML = svg;
+  }
+
+  return { render };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
    Scanner — camera-based QR / barcode reader
 ═══════════════════════════════════════════════════════════════ */
 const Scanner = (() => {
@@ -884,12 +1010,21 @@ const App = (() => {
   // ── Card Detail Screen ────────────────────────────────────────
 
   let activeDataIndex = 0;
+  let currentCodeFormat = 'qr'; // 'qr' or 'barcode'
 
-  function renderCardCode(card, index) {
+  function renderCardCode(card, index, format) {
+    if (format) currentCodeFormat = format;
+
     const items = parseCardData(card.data);
+    const wrap = document.getElementById('detail-qr');
+    const badge = document.getElementById('detail-multi-badge');
+    const shuffleBtn = document.getElementById('shuffle-code-btn');
+
     if (!items.length) {
       document.getElementById('detail-data').textContent = '';
-      QR.render(document.getElementById('detail-qr'), '');
+      if (wrap) wrap.innerHTML = '';
+      if (badge) badge.classList.add('hidden');
+      if (shuffleBtn) shuffleBtn.classList.add('hidden');
       return;
     }
 
@@ -897,10 +1032,23 @@ const App = (() => {
     const activeData = items[activeDataIndex];
 
     document.getElementById('detail-data').textContent = activeData;
-    QR.render(document.getElementById('detail-qr'), activeData);
 
-    const badge = document.getElementById('detail-multi-badge');
-    const shuffleBtn = document.getElementById('shuffle-code-btn');
+    if (wrap) {
+      if (currentCodeFormat === 'barcode') {
+        wrap.className = 'qr-code-wrap format-barcode';
+        Barcode.render(wrap, activeData);
+      } else {
+        wrap.className = 'qr-code-wrap format-qr';
+        QR.render(wrap, activeData);
+      }
+    }
+
+    const toggleLabel = document.getElementById('toggle-format-label');
+    if (toggleLabel) {
+      toggleLabel.textContent = currentCodeFormat === 'barcode'
+        ? '🔳 Switch to QR Code'
+        : '║▌║ Switch to Barcode';
+    }
 
     if (items.length > 1) {
       if (badge) {
@@ -916,6 +1064,14 @@ const App = (() => {
     }
   }
 
+  function toggleCodeFormat() {
+    if (!currentCard) return;
+    currentCodeFormat = (currentCodeFormat === 'qr') ? 'barcode' : 'qr';
+    renderCardCode(currentCard, activeDataIndex, currentCodeFormat);
+    const formatName = currentCodeFormat === 'barcode' ? 'Barcode ║▌║' : 'QR Code 🔳';
+    toast(`Switched to ${formatName}`);
+  }
+
   function openCard(id) {
     const card = CardStore.getById(id);
     if (!card) return;
@@ -928,7 +1084,15 @@ const App = (() => {
 
     const items = parseCardData(card.data);
     const randomIndex = items.length > 1 ? Math.floor(Math.random() * items.length) : 0;
-    renderCardCode(card, randomIndex);
+
+    const firstCode = items[0] || '';
+    if (/^\d{8,18}$/.test(firstCode.trim())) {
+      currentCodeFormat = 'barcode';
+    } else {
+      currentCodeFormat = 'qr';
+    }
+
+    renderCardCode(card, randomIndex, currentCodeFormat);
 
     const accEl = document.getElementById('location-accuracy');
     if (currentPos) {
@@ -1110,16 +1274,37 @@ const App = (() => {
     const preview    = document.getElementById('qr-preview');
     const hint       = document.getElementById('qr-hint');
 
-    dataInput.addEventListener('input', () => {
+    let previewFormat = 'qr';
+
+    function updatePreview() {
       const val = dataInput.value.trim();
       const items = parseCardData(val);
       if (items.length) {
-        hint.textContent = items.length > 1 ? `✨ ${items.length} codes entered — first code shown in preview` : '';
-        QR.render(preview, items[0]);
+        hint.textContent = items.length > 1
+          ? `✨ ${items.length} codes entered (tap preview to switch format: QR / Barcode)`
+          : 'Tap preview to switch format (QR / Barcode)';
+        const code = items[0];
+        if (previewFormat === 'barcode') {
+          preview.className = 'qr-preview-box format-barcode';
+          Barcode.render(preview, code);
+        } else {
+          preview.className = 'qr-preview-box format-qr';
+          QR.render(preview, code);
+        }
       } else {
         preview.innerHTML = '';
+        preview.className = 'qr-preview-box';
         hint.textContent  = 'Enter card data above to preview';
       }
+    }
+
+    dataInput.addEventListener('input', updatePreview);
+    preview.style.cursor = 'pointer';
+    preview.title = 'Tap preview to switch format (QR / Barcode)';
+    preview.addEventListener('click', () => {
+      previewFormat = previewFormat === 'qr' ? 'barcode' : 'qr';
+      updatePreview();
+      toast(`Preview format: ${previewFormat === 'barcode' ? 'Barcode ║▌║' : 'QR Code 🔳'}`);
     });
 
     const scanBtn = document.getElementById('scan-btn');
@@ -1264,6 +1449,22 @@ const App = (() => {
       showScreen('add');
     });
 
+    const toggleFormatBtn = document.getElementById('toggle-format-btn');
+    if (toggleFormatBtn) {
+      toggleFormatBtn.addEventListener('click', toggleCodeFormat);
+    }
+
+    const detailQr = document.getElementById('detail-qr');
+    if (detailQr) {
+      detailQr.addEventListener('click', toggleCodeFormat);
+      detailQr.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleCodeFormat();
+        }
+      });
+    }
+
     const editBtn = document.getElementById('detail-edit-top');
     if (editBtn) {
       editBtn.addEventListener('click', () => {
@@ -1352,6 +1553,7 @@ window.JSURL = JSURL;
 window.Geohash = Geohash;
 window.CardStore = CardStore;
 window.Location = Location;
+window.Barcode = Barcode;
 window.App = App;
 
 window.addEventListener('error', (e) => {

@@ -1,6 +1,8 @@
 ﻿/* ── Reset & Custom Properties ─────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+.hidden { display: none !important; }
+
 :root {
   --bg:         #0a0a0f;
   --surface:    #12121e;
@@ -492,10 +494,38 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
   margin-bottom: 24px;
 }
 
-.qr-code-wrap svg {
+.qr-code-wrap {
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.qr-code-wrap:hover {
+  transform: scale(1.02);
+}
+
+.qr-code-wrap:active {
+  transform: scale(0.98);
+}
+
+.qr-code-wrap.format-qr svg,
+.qr-preview-box.format-qr svg {
   display: block;
   width: 260px !important;
   height: 260px !important;
+  max-width: 100%;
+}
+
+.qr-code-wrap.format-barcode svg,
+.qr-preview-box.format-barcode svg {
+  display: block;
+  width: 100% !important;
+  max-width: 320px !important;
+  height: auto !important;
+  max-height: 140px !important;
 }
 
 .qr-data-label {

@@ -105,7 +105,10 @@
       </header>
       <div class="scroll-container detail-scroll">
         <div class="qr-display-card" id="qr-display-card">
-          <div id="detail-qr" class="qr-code-wrap" role="img" aria-label="QR code"></div>
+          <div id="detail-qr" class="qr-code-wrap" role="button" tabindex="0" aria-label="Tap code to switch format (QR / Barcode)" title="Tap code to switch format (QR / Barcode)"></div>
+          <button type="button" id="toggle-format-btn" class="btn btn--secondary btn--sm" style="margin-top:2px;">
+            <span id="toggle-format-label">║▌║ Switch to Barcode</span>
+          </button>
           <p id="detail-data" class="qr-data-label"></p>
           <p id="detail-multi-badge" class="multi-code-badge hidden"></p>
           <button type="button" id="shuffle-code-btn" class="btn btn--secondary btn--sm hidden" style="margin-top:10px;">
