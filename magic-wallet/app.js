@@ -258,13 +258,16 @@ const Geohash = (() => {
 ═══════════════════════════════════════════════════════════════ */
 function parseCardData(input) {
   if (!input) return [];
+  let list = [];
   if (Array.isArray(input)) {
-    return input.map(s => String(s).trim()).filter(Boolean);
+    list = input.map(s => String(s).trim()).filter(Boolean);
+  } else {
+    list = String(input)
+      .split(/[\r\n,]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
   }
-  return String(input)
-    .split(/[\r\n,]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
+  return [...new Set(list)];
 }
 
 function normalizeCardDataForSave(input) {
@@ -753,6 +756,7 @@ const Scanner = (() => {
     if (!('BarcodeDetector' in window)) return null;
     try {
       const supported = await BarcodeDetector.getSupportedFormats();
+      console.log(supported)
       const formats   = FORMATS.filter(f => supported.includes(f));
       return new BarcodeDetector({ formats: formats.length ? formats : ['qr_code'] });
     } catch { return null; }
@@ -959,7 +963,7 @@ const App = (() => {
         </div>
         <div class="featured-footer">
           <button type="button" class="btn btn--primary btn--sm featured-open-btn" id="featured-open-btn">
-            Open full card ›
+            Open card ›
           </button>
         </div>
       </div>`;
@@ -1145,8 +1149,8 @@ const App = (() => {
     const toggleLabel = document.getElementById('toggle-format-label');
     if (toggleLabel) {
       toggleLabel.textContent = currentCodeFormat === 'barcode'
-        ? '🔳 Switch to QR Code'
-        : '║▌║ Switch to Barcode';
+        ? '🔳 QR Code'
+        : '║▌║ Barcode';
     }
 
     if (items.length > 1) {
@@ -1266,6 +1270,7 @@ const App = (() => {
       data: card.data,
       emoji: card.emoji || '💳',
       color: card.color || '#6c63ff',
+      format: getCardFormat(card),
       locations: card.locations || []
     };
     const jsurlStr = JSURL.stringify(cardData);
@@ -1345,6 +1350,7 @@ const App = (() => {
           data: String(cardData.data),
           emoji: cardData.emoji ? String(cardData.emoji) : '💳',
           color: cardData.color ? String(cardData.color) : '#6c63ff',
+          format: cardData.format && (cardData.format === 'barcode' || cardData.format === 'qr') ? cardData.format : undefined,
           locations: locs
         });
 
@@ -1364,18 +1370,22 @@ const App = (() => {
 
   // ── Add Card Screen ───────────────────────────────────────────
 
+  let previewFormatTouched = false;
+  let previewFormat = 'qr';
+
   function initAddForm() {
     const dataInput  = document.getElementById('card-data');
     const colorInput = document.getElementById('card-color');
     const preview    = document.getElementById('qr-preview');
     const hint       = document.getElementById('qr-hint');
 
-    let previewFormat = 'qr';
-
     function updatePreview() {
       const val = dataInput.value.trim();
       const items = parseCardData(val);
       if (items.length) {
+        if (!previewFormatTouched) {
+          previewFormat = getCardFormat({ data: val });
+        }
         hint.textContent = items.length > 1
           ? `✨ ${items.length} codes entered (tap preview to switch format: QR / Barcode)`
           : 'Tap preview to switch format (QR / Barcode)';
@@ -1398,6 +1408,7 @@ const App = (() => {
     preview.style.cursor = 'pointer';
     preview.title = 'Tap preview to switch format (QR / Barcode)';
     preview.addEventListener('click', () => {
+      previewFormatTouched = true;
       previewFormat = previewFormat === 'qr' ? 'barcode' : 'qr';
       updatePreview();
       toast(`Preview format: ${previewFormat === 'barcode' ? 'Barcode ║▌║' : 'QR Code 🔳'}`);
@@ -1460,7 +1471,7 @@ const App = (() => {
       }
 
       if (editingCardId) {
-        const updated = CardStore.update(editingCardId, { name, data, emoji, color });
+        const updated = CardStore.update(editingCardId, { name, data, emoji, color, format: previewFormat });
         resetAddForm();
         if (updated) {
           openCard(updated.id);
@@ -1470,7 +1481,7 @@ const App = (() => {
           renderHome();
         }
       } else {
-        const savedCard = CardStore.add({ name, data, emoji, color });
+        const savedCard = CardStore.add({ name, data, emoji, color, format: previewFormat });
         resetAddForm();
         showScreen('home', 'back');
         renderHome();
@@ -1485,6 +1496,8 @@ const App = (() => {
 
   function resetAddForm() {
     editingCardId = null;
+    previewFormatTouched = false;
+    previewFormat = 'qr';
     const form = document.getElementById('add-form');
     if (form) form.reset();
     const emojiInput = document.getElementById('card-emoji');
@@ -1511,6 +1524,8 @@ const App = (() => {
   function openEditCard(card) {
     if (!card) return;
     editingCardId = card.id;
+    previewFormatTouched = true;
+    previewFormat = getCardFormat(card);
 
     const title = document.getElementById('add-screen-title');
     if (title) title.textContent = 'Edit card';
