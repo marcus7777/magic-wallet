@@ -948,16 +948,13 @@ const App = (() => {
         <div class="card-tile-featured-header" id="featured-card-header">
           <div class="featured-title-wrap">
             <span class="card-emoji" style="font-size:1.8rem">${esc(card.emoji || '💳')}</span>
-            <div class="featured-name-block">
+            <span class="featured-name-block">
               <span class="card-name">${esc(card.name)}</span>
-            </div>
+            </span>
           </div>
-          <button type="button" class="btn btn--secondary btn--sm featured-format-btn" id="featured-format-btn" title="Switch format and remember selection">
-          </button>
         </div>
         <div class="featured-code-card">
           <div class="featured-code-wrap ${isBarcode ? 'format-barcode' : 'format-qr'}" id="featured-qr-box" role="button" tabindex="0" title="Tap code to switch format (QR / Barcode)" aria-label="Tap code to switch format"></div>
-          <p class="featured-data-label">${esc(activeData)}</p>
         </div>
         <div class="featured-footer">
           <button type="button" class="btn btn--primary btn--sm featured-open-btn" id="featured-open-btn">
@@ -1195,7 +1192,7 @@ const App = (() => {
     const accEl = document.getElementById('location-accuracy');
     if (currentPos) {
       const currentGh = Geohash.encode(currentPos.lat, currentPos.lon, 7);
-      accEl.textContent = `Current area: ${currentGh} · Matching checks exact cell & 8 adjacent neighbors (~150m)`;
+      accEl.textContent = `Current area: ${currentGh} · Matching checks exact cell & 8 adjacent neighbors`;
     } else {
       accEl.textContent = 'Location unavailable — tap Used here to save current area';
     }
@@ -1219,7 +1216,7 @@ const App = (() => {
       locs.slice().reverse().map(gh => {
         return `<div class="loc-entry">
           <span>📍 <code>${esc(gh)}</code></span>
-          <a href="https://geohash.softeng.co/${esc(gh)}"><span class="loc-date">Geohash cell (~150m)</span> </a>
+          <a href="https://geohash.softeng.co/${esc(gh)}" target="map"><span class="loc-date">Geohash cell</span> </a>
         </div>`;
       }).join('');
   }
