@@ -418,6 +418,40 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 8
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
 
 .color-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Format Preference Row */
+.format-options-row {
+  display: flex;
+  gap: 10px;
+}
+.format-option-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  background: var(--surface-card, rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm, 12px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.format-option-btn input[type="radio"] {
+  display: none;
+}
+.format-option-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted, #94a3b8);
+}
+.format-option-btn:has(input[type="radio"]:checked) {
+  background: rgba(108, 99, 255, 0.25);
+  border-color: #6c63ff;
+}
+.format-option-btn:has(input[type="radio"]:checked) .format-option-label {
+  color: #fff;
+  font-weight: 600;
+}
 .swatch {
   width: 30px; height: 30px;
   border-radius: 50%;

@@ -853,7 +853,7 @@ const Scanner = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   App — wires everything together
+   App — bring everything together
 ═══════════════════════════════════════════════════════════════ */
 const App = (() => {
   let currentPos    = null; // { lat, lon, accuracy }
@@ -950,11 +950,9 @@ const App = (() => {
             <span class="card-emoji" style="font-size:1.8rem">${esc(card.emoji || '💳')}</span>
             <div class="featured-name-block">
               <span class="card-name">${esc(card.name)}</span>
-              <span class="featured-badge">📍 Nearby${multiBadge}</span>
             </div>
           </div>
           <button type="button" class="btn btn--secondary btn--sm featured-format-btn" id="featured-format-btn" title="Switch format and remember selection">
-            Switch to ${switchLabel}
           </button>
         </div>
         <div class="featured-code-card">
@@ -1221,7 +1219,7 @@ const App = (() => {
       locs.slice().reverse().map(gh => {
         return `<div class="loc-entry">
           <span>📍 <code>${esc(gh)}</code></span>
-          <span class="loc-date">Geohash cell (~150m)</span>
+          <a href="https://geohash.softeng.co/${esc(gh)}"><span class="loc-date">Geohash cell (~150m)</span> </a>
         </div>`;
       }).join('');
   }
@@ -1373,6 +1371,20 @@ const App = (() => {
   let previewFormatTouched = false;
   let previewFormat = 'qr';
 
+  function getSelectedFormatRadio() {
+    const barcodeRadio = document.getElementById('card-format-barcode');
+    return (barcodeRadio && barcodeRadio.checked) ? 'barcode' : 'qr';
+  }
+
+  function setFormatRadio(fmt) {
+    const qrRadio = document.getElementById('card-format-qr');
+    const barcodeRadio = document.getElementById('card-format-barcode');
+    if (qrRadio && barcodeRadio) {
+      qrRadio.checked = (fmt !== 'barcode');
+      barcodeRadio.checked = (fmt === 'barcode');
+    }
+  }
+
   function initAddForm() {
     const dataInput  = document.getElementById('card-data');
     const colorInput = document.getElementById('card-color');
@@ -1385,6 +1397,9 @@ const App = (() => {
       if (items.length) {
         if (!previewFormatTouched) {
           previewFormat = getCardFormat({ data: val });
+          setFormatRadio(previewFormat);
+        } else {
+          previewFormat = getSelectedFormatRadio();
         }
         hint.textContent = items.length > 1
           ? `✨ ${items.length} codes entered (tap preview to switch format: QR / Barcode)`
@@ -1405,11 +1420,21 @@ const App = (() => {
     }
 
     dataInput.addEventListener('input', updatePreview);
+
+    document.querySelectorAll('input[name="card-format"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        previewFormatTouched = true;
+        previewFormat = getSelectedFormatRadio();
+        updatePreview();
+      });
+    });
+
     preview.style.cursor = 'pointer';
     preview.title = 'Tap preview to switch format (QR / Barcode)';
     preview.addEventListener('click', () => {
       previewFormatTouched = true;
       previewFormat = previewFormat === 'qr' ? 'barcode' : 'qr';
+      setFormatRadio(previewFormat);
       updatePreview();
       toast(`Preview format: ${previewFormat === 'barcode' ? 'Barcode ║▌║' : 'QR Code 🔳'}`);
     });
@@ -1464,6 +1489,7 @@ const App = (() => {
       const data  = document.getElementById('card-data').value.trim();
       const emoji = document.getElementById('card-emoji').value.trim() || '💳';
       const color = colorInput.value;
+      const selectedFormat = getSelectedFormatRadio();
 
       if (!name || !data) {
         toast('⚠️ Please fill in shop name and card data');
@@ -1471,7 +1497,7 @@ const App = (() => {
       }
 
       if (editingCardId) {
-        const updated = CardStore.update(editingCardId, { name, data, emoji, color, format: previewFormat });
+        const updated = CardStore.update(editingCardId, { name, data, emoji, color, format: selectedFormat });
         resetAddForm();
         if (updated) {
           openCard(updated.id);
@@ -1481,7 +1507,7 @@ const App = (() => {
           renderHome();
         }
       } else {
-        const savedCard = CardStore.add({ name, data, emoji, color, format: previewFormat });
+        const savedCard = CardStore.add({ name, data, emoji, color, format: selectedFormat });
         resetAddForm();
         showScreen('home', 'back');
         renderHome();
@@ -1498,6 +1524,7 @@ const App = (() => {
     editingCardId = null;
     previewFormatTouched = false;
     previewFormat = 'qr';
+    setFormatRadio('qr');
     const form = document.getElementById('add-form');
     if (form) form.reset();
     const emojiInput = document.getElementById('card-emoji');
@@ -1526,6 +1553,7 @@ const App = (() => {
     editingCardId = card.id;
     previewFormatTouched = true;
     previewFormat = getCardFormat(card);
+    setFormatRadio(previewFormat);
 
     const title = document.getElementById('add-screen-title');
     if (title) title.textContent = 'Edit card';
@@ -1665,6 +1693,8 @@ window.Geohash = Geohash;
 window.CardStore = CardStore;
 window.Location = Location;
 window.Barcode = Barcode;
+window.QR = QR;
+window.Scanner = Scanner;
 window.App = App;
 
 window.addEventListener('error', (e) => {

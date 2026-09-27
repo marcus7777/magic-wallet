@@ -1,0 +1,20 @@
+{
+  "name": "magic-wallet",
+  "version": "1.0.0",
+  "description": "A lightweight, privacy-focused, location-aware Web Application for managing loyalty cards and barcodes.",
+  "main": "magic-wallet/app.js",
+  "scripts": {
+    "start": "npx http-server magic-wallet -p 8080",
+    "test": "jest --runInBand",
+    "test:unit": "jest tests/unit --runInBand",
+    "test:selenium": "jest tests/selenium --runInBand"
+  },
+  "devDependencies": {
+    "geckodriver": "^5.0.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jsdom": "^26.0.0",
+    "selenium-webdriver": "^4.20.0"
+  },
+  "license": "MIT"
+}
