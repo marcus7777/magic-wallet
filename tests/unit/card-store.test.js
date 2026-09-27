@@ -117,4 +117,47 @@ describe('Feature 6 & Feature 8 & Feature 3: CardStore & LocalStorage Data Manag
     const updatedCard = window.CardStore.getById(card.id);
     expect(updatedCard.locations.length).toBeLessThanOrEqual(20);
   });
+
+  test('CardStore.removeLocationGeohash removes specified location geohash from card', () => {
+    const card = window.CardStore.add({
+      name: 'Supermarket',
+      data: 'LOC123',
+      locations: ['gcpvj0d', 'gcpvj0e']
+    });
+
+    expect(card.locations).toEqual(['gcpvj0d', 'gcpvj0e']);
+
+    window.CardStore.removeLocationGeohash(card.id, 'gcpvj0d');
+    const updated = window.CardStore.getById(card.id);
+    expect(updated.locations).toEqual(['gcpvj0e']);
+  });
+
+  test('Edit card screen renders saved locations and allows removing a location', () => {
+    const card = window.CardStore.add({
+      name: 'Local Store',
+      data: 'STORE-999',
+      locations: ['gcpvj0a', 'gcpvj0b']
+    });
+
+    window.App.init();
+
+    const tile = document.querySelector(`[data-id="${card.id}"]`);
+    expect(tile).not.toBeNull();
+    tile.click();
+
+    const editBtn = document.getElementById('detail-edit-top');
+    expect(editBtn).not.toBeNull();
+    editBtn.click();
+
+    const editWrap = document.getElementById('edit-locations-wrap');
+    expect(editWrap.classList.contains('hidden')).toBe(false);
+
+    const removeBtns = editWrap.querySelectorAll('.btn-remove-loc');
+    expect(removeBtns.length).toBe(2);
+
+    removeBtns[0].click();
+
+    const updated = window.CardStore.getById(card.id);
+    expect(updated.locations).toEqual(['gcpvj0b']);
+  });
 });

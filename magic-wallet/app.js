@@ -415,6 +415,17 @@ const CardStore = (() => {
       return card;
     },
 
+    removeLocationGeohash(id, geohash) {
+      const cards = load();
+      const card = cards.find(c => c.id === id);
+      if (!card) return null;
+      card.locations = card.locations || [];
+      const gh7 = String(geohash).slice(0, 7);
+      card.locations = card.locations.filter(l => l !== gh7);
+      persist(cards);
+      return card;
+    },
+
     getById(id) {
       return load().find(c => c.id === id) || null;
     },
@@ -432,6 +443,9 @@ const CardStore = (() => {
         if (updates.format === 'barcode' || updates.format === 'qr') {
           card.format = updates.format;
         }
+      }
+      if (Array.isArray(updates.locations)) {
+        card.locations = updates.locations.map(l => String(l).slice(0, 7)).filter(l => l.length === 7);
       }
 
       persist(cards);
@@ -1216,9 +1230,24 @@ const App = (() => {
       locs.slice().reverse().map(gh => {
         return `<div class="loc-entry">
           <span>📍 <code>${esc(gh)}</code></span>
-          <a href="https://geohash.softeng.co/${esc(gh)}" target="map"><span class="loc-date">Geohash cell</span> </a>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <a href="https://geohash.softeng.co/${esc(gh)}" target="map"><span class="loc-date">Geohash cell</span> </a>
+            <button type="button" class="btn-remove-loc" data-geohash="${esc(gh)}" aria-label="Remove location ${esc(gh)}" title="Remove location">🗑</button>
+          </div>
         </div>`;
       }).join('');
+
+    wrap.querySelectorAll('.btn-remove-loc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ghToRemove = btn.dataset.geohash;
+        if (ghToRemove && currentCard) {
+          const updated = CardStore.removeLocationGeohash(currentCard.id, ghToRemove);
+          currentCard = updated || currentCard;
+          renderLocationHistory(currentCard);
+          toast(`Location ${ghToRemove} removed 🗑`);
+        }
+      });
+    });
   }
 
   // ── "Used here" ───────────────────────────────────────────────
@@ -1543,6 +1572,48 @@ const App = (() => {
     const hint = document.getElementById('qr-hint');
     if (preview) preview.innerHTML = '';
     if (hint) hint.textContent = 'Enter card data above to preview';
+
+    const editLocWrap = document.getElementById('edit-locations-wrap');
+    const editLocList = document.getElementById('edit-locations-list');
+    if (editLocWrap) editLocWrap.classList.add('hidden');
+    if (editLocList) editLocList.innerHTML = '';
+  }
+
+  function renderEditLocations(card) {
+    const wrap = document.getElementById('edit-locations-wrap');
+    const list = document.getElementById('edit-locations-list');
+    if (!wrap || !list) return;
+
+    wrap.classList.remove('hidden');
+
+    const current = CardStore.getById(card.id) || card;
+    const locs = current.locations || [];
+
+    if (locs.length === 0) {
+      list.innerHTML = '<p class="location-info-small">No saved locations for this card</p>';
+      return;
+    }
+
+    list.innerHTML = locs.map(gh => {
+      return `<div class="edit-loc-item">
+        <span>📍 <code>${esc(gh)}</code></span>
+        <button type="button" class="btn-remove-loc" data-geohash="${esc(gh)}" aria-label="Remove location ${esc(gh)}" title="Remove location">🗑 Remove</button>
+      </div>`;
+    }).join('');
+
+    list.querySelectorAll('.btn-remove-loc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ghToRemove = btn.dataset.geohash;
+        if (ghToRemove && editingCardId) {
+          const updated = CardStore.removeLocationGeohash(editingCardId, ghToRemove);
+          if (currentCard && currentCard.id === editingCardId) {
+            currentCard = updated || currentCard;
+          }
+          renderEditLocations(updated || { ...card, locations: locs.filter(l => l !== ghToRemove) });
+          toast(`Location ${ghToRemove} removed 🗑`);
+        }
+      });
+    });
   }
 
   function openEditCard(card) {
@@ -1573,6 +1644,8 @@ const App = (() => {
 
     const dataInput = document.getElementById('card-data');
     if (dataInput) dataInput.dispatchEvent(new Event('input'));
+
+    renderEditLocations(card);
 
     showScreen('add');
   }

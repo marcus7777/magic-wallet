@@ -41,6 +41,10 @@ function setupEnvironment() {
           <div class="color-swatches">
             <button type="button" class="swatch" data-color="#6c63ff"></button>
           </div>
+          <div id="edit-locations-wrap" class="form-field hidden">
+            <label>Saved locations</label>
+            <div id="edit-locations-list" class="edit-locations-list"></div>
+          </div>
           <div id="qr-preview" class="qr-preview-box"></div>
           <p id="qr-hint" class="qr-hint"></p>
           <button type="submit" id="add-submit-btn">Save card</button>
