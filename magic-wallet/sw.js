@@ -1,10 +1,10 @@
-const CACHE_NAME = 'magic-wallet-v16';
+const CACHE_NAME = 'magic-wallet-v17';
 
 const PRECACHE_ASSETS = [
   './',
-  'index.html',
-  'style.css',
   'app.js',
+  'style.css',
+  'index.html',
   'manifest.json',
   'icon.svg',
   'vendor/qrcode.js',
