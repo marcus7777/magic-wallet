@@ -882,3 +882,7 @@ textarea#card-data:focus {
 .featured-title-wrap {
   text-align: center;
 }
+.featured-qr-box {
+  padding: 5%;
+  background-color: white;
+}
