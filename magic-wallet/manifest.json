@@ -4,6 +4,7 @@
   "description": "Location-aware QR loyalty card wallet",
   "start_url": ".",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
   "icons": [

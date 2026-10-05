@@ -1747,6 +1747,9 @@ const App = (() => {
 
   return {
     init() {
+      if (screen.orientation && typeof screen.orientation.lock === 'function') {
+        screen.orientation.lock('portrait').catch(() => {});
+      }
       bindGlobalEvents();
       initAddForm();
       const imported = checkUrlForCardImport();

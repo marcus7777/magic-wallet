@@ -12,6 +12,7 @@ describe('Feature 7: Offline First & PWA Ready (Manifest and SW)', () => {
     expect(content.short_name).toBe('Wallet');
     expect(content.start_url).toBe('.');
     expect(content.display).toBe('standalone');
+    expect(content.orientation).toBe('portrait');
     expect(content.icons).toBeDefined();
     expect(content.icons.length).toBeGreaterThan(0);
   });
