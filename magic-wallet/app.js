@@ -1209,15 +1209,44 @@ const App = (() => {
       accEl.textContent = `Current area: ${currentGh} · Matching checks exact cell & 8 adjacent neighbors`;
     } else {
       accEl.textContent = 'Location unavailable — tap Used here to save current area';
+      Location.getPosition()
+        .then(pos => {
+          currentPos = pos;
+          if (currentCard && currentCard.id === card.id) {
+            const currentGh = Geohash.encode(currentPos.lat, currentPos.lon, 7);
+            accEl.textContent = `Current area: ${currentGh} · Matching checks exact cell & 8 adjacent neighbors`;
+            updateUseHereButton(currentCard);
+          }
+        })
+        .catch(() => {});
     }
 
     renderLocationHistory(card);
     showScreen('detail');
   }
 
+  function updateUseHereButton(card) {
+    const btn = document.getElementById('use-here-btn');
+    if (!btn || !card) return;
+
+    if (currentPos) {
+      const currentGh = Geohash.encode(currentPos.lat, currentPos.lon, 7);
+      const isHereSaved = Array.isArray(card.locations) && card.locations.includes(currentGh);
+      if (isHereSaved) {
+        btn.classList.add('hidden');
+      } else {
+        btn.classList.remove('hidden');
+      }
+    } else {
+      btn.classList.remove('hidden');
+    }
+  }
+
   function renderLocationHistory(card) {
     const wrap = document.getElementById('location-history');
     const locs = card.locations || [];
+
+    updateUseHereButton(card);
 
     if (locs.length === 0) {
       wrap.innerHTML = `<p class="location-info-small" style="margin-top:8px">

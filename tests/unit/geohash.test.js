@@ -76,4 +76,59 @@ describe('Feature 1: Location-Aware Card Matching (Geohash & Location)', () => {
     const match = window.Location.findNearest(mockCards, 51.5074, -0.1278);
     expect(match).toBeNull();
   });
+
+  test('Shows "Used here" button only if current location is not in card saved locations list', async () => {
+    navigator.geolocation = {
+      getCurrentPosition: jest.fn().mockImplementation((success) =>
+        success({
+          coords: { latitude: 51.5074, longitude: -0.1278, accuracy: 10 }
+        })
+      )
+    };
+
+    setupEnvironment();
+    const currentGh = window.Geohash.encode(51.5074, -0.1278, 7);
+
+    // Create a card with current location saved
+    const savedCard = window.CardStore.add({
+      name: 'London Market',
+      data: 'CARD123',
+      locations: [currentGh]
+    });
+
+    window.App.init();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Open detail for savedCard
+    const tile1 = document.querySelector(`[data-id="${savedCard.id}"]`);
+    tile1.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const useBtn = document.getElementById('use-here-btn');
+    expect(useBtn.classList.contains('hidden')).toBe(true);
+
+    // Create another card without current location saved
+    const unsavedCard = window.CardStore.add({
+      name: 'Other Shop',
+      data: 'CARD456',
+      locations: ['gcpvj0e']
+    });
+
+    const backBtn = document.querySelector('#detail-header .back-btn');
+    backBtn.click();
+
+    const tile2 = document.querySelector(`[data-id="${unsavedCard.id}"]`);
+    tile2.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(useBtn.classList.contains('hidden')).toBe(false);
+
+    // Now add currentGh to unsavedCard
+    window.CardStore.addLocationGeohash(unsavedCard.id, currentGh);
+    const tile2Again = document.querySelector(`[data-id="${unsavedCard.id}"]`);
+    tile2Again.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(useBtn.classList.contains('hidden')).toBe(true);
+  });
 });
