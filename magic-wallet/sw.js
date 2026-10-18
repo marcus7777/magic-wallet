@@ -1,4 +1,4 @@
-const CACHE_NAME = 'magic-wallet-v18';
+const CACHE_NAME = 'magic-wallet-v1.0.18';
 
 const PRECACHE_ASSETS = [
   './',
