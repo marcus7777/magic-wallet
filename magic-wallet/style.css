@@ -552,6 +552,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
   width: 260px !important;
   height: 260px !important;
   max-width: 100%;
+  padding: 5%;
 }
 
 .qr-code-wrap.format-barcode svg,
@@ -883,6 +884,6 @@ textarea#card-data:focus {
   text-align: center;
 }
 .featured-code-wrap.format-qr {
-  padding: 5%;
+  padding: 15%;
   background: #fff;
 }
